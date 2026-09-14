@@ -1,0 +1,62 @@
+import { CONTROL_CLIENT_ID } from '../../lib/control-authority';
+import {
+  mobileControlBlocksCommands,
+  useControlAuthorityStore,
+} from '../../stores/useControlAuthorityStore';
+
+describe('useControlAuthorityStore', () => {
+  beforeEach(() => useControlAuthorityStore.getState().reset('detecting'));
+
+  it('blocks commands until this app owns the lease', () => {
+    expect(mobileControlBlocksCommands()).toBe(true);
+    useControlAuthorityStore.getState().applyStatus({ state: 'available' });
+    expect(mobileControlBlocksCommands()).toBe(true);
+    useControlAuthorityStore.getState().applyStatus({
+      state: 'acquired', ownerId: CONTROL_CLIENT_ID,
+    });
+    expect(mobileControlBlocksCommands()).toBe(false);
+  });
+
+  it('does not treat another app ownership as local control', () => {
+    useControlAuthorityStore.getState().applyStatus({
+      state: 'acquired', ownerId: 'app-other',
+    });
+    expect(useControlAuthorityStore.getState().status).toBe('owned_by_other');
+    expect(mobileControlBlocksCommands()).toBe(true);
+  });
+
+  it('keeps legacy bridges unblocked', () => {
+    useControlAuthorityStore.getState().applyStatus({ state: 'unsupported' });
+    expect(mobileControlBlocksCommands()).toBe(false);
+  });
+
+  it('allows teleop but preserves the Mission base owner during an override', () => {
+    useControlAuthorityStore.getState().applyStatus({
+      state: 'override_available', baseOwnerId: 'mission-42',
+    });
+    expect(useControlAuthorityStore.getState().status).toBe('override_available');
+    expect(mobileControlBlocksCommands()).toBe(true);
+
+    useControlAuthorityStore.getState().applyStatus({
+      state: 'override_acquired',
+      ownerId: CONTROL_CLIENT_ID,
+      baseOwnerId: 'mission-42',
+    });
+    expect(useControlAuthorityStore.getState().baseOwnerId).toBe('mission-42');
+    expect(mobileControlBlocksCommands()).toBe(false);
+  });
+
+  it('fails closed when the typed authority heartbeat becomes stale', () => {
+    useControlAuthorityStore.getState().applyStatus({
+      state: 'acquired', ownerId: CONTROL_CLIENT_ID,
+    });
+    useControlAuthorityStore.getState().reset('stale');
+
+    expect(useControlAuthorityStore.getState()).toMatchObject({
+      status: 'stale',
+      ownerId: null,
+      baseOwnerId: null,
+    });
+    expect(mobileControlBlocksCommands()).toBe(true);
+  });
+});
