@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { theme } from '../constants/theme';
 import { useTranslation } from '../lib/i18n';
 import type { Transport } from '../lib/transport';
 import { useRosStore } from '../stores/useRosStore';
+import { togglePostureStop, usePostureStore } from '../lib/posture-actions';
 
 /**
  * The canonical request is consumed by the safety supervisor/velocity arbiter.
@@ -40,23 +41,29 @@ export function emergencyStopIsEnabled(
   return connectionStatus === 'connected' && Boolean(transport) && !url?.startsWith('demo://');
 }
 
-export function EmergencyStop({ compact = false }: { compact?: boolean }) {
+export function EmergencyStop({ compact = false, postureToggle = false }: { compact?: boolean; postureToggle?: boolean }) {
   const status = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
   const { t } = useTranslation();
   const [pressed, setPressed] = useState(false);
+  const pending = usePostureStore((state) => state.pending);
+  const lying = usePostureStore((state) => state.posture === 'lying');
 
-  const disabled = !emergencyStopIsEnabled(status, transport, url);
+  const disabled = !emergencyStopIsEnabled(status, transport, url) || (postureToggle && pending !== null);
 
   const sendEStop = useCallback(() => {
     if (!transport || disabled) return;
+    if (postureToggle) {
+      void togglePostureStop().catch((error) => Alert.alert(t('posture.failedTitle'), String(error?.message || error)));
+      return;
+    }
     publishEmergencyStop(transport);
 
     // Brief visual feedback
     setPressed(true);
     setTimeout(() => setPressed(false), 600);
-  }, [transport, disabled]);
+  }, [transport, disabled, postureToggle, t]);
 
   return (
     <TouchableOpacity
@@ -73,7 +80,7 @@ export function EmergencyStop({ compact = false }: { compact?: boolean }) {
       activeOpacity={0.6}
     >
       <Ionicons
-        name={pressed ? 'checkmark-circle' : 'stop-circle-outline'}
+        name={postureToggle && pending ? 'hourglass-outline' : (postureToggle ? lying : pressed) ? 'checkmark-circle' : 'stop-circle-outline'}
         size={compact ? 20 : 16}
         color={
           disabled

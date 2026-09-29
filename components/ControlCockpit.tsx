@@ -62,6 +62,10 @@ import { mapWidget } from '../widgets/map';
 import { pointCloud3DWidget } from '../widgets/pointcloud3d';
 import { CameraFeed } from './CameraFeed';
 import { EmergencyStop } from './EmergencyStop';
+import { CockpitTelemetry } from './CockpitTelemetry';
+import { InspectionProgress } from './InspectionProgress';
+import { ControlAuthorityButton } from './ControlAuthority';
+import { PostureControl } from './PostureControl';
 import { Joystick } from './Joystick';
 import { LayoutManager } from './LayoutManager';
 import { WidgetSettings } from './WidgetSettings';
@@ -333,6 +337,10 @@ export function ControlCockpit({
     () => ({
       ...pointCloud3DWidget.defaultConfig,
       ...(pointCloudSelection?.node.config ?? {}),
+      // Upgrade the legacy live-scan preview to the corrected complete map.
+      topic: !pointCloudSelection?.node.config?.topic || pointCloudSelection.node.config.topic === '/cloud_registered_global'
+        ? '/Laser_map' : pointCloudSelection.node.config.topic,
+      odomTopic: '/omni/tf_manager/body_odom_global',
       mapFrame: OMNI_MAP_FRAME,
       robotFrame: OMNI_BASE_FRAME,
     }),
@@ -778,8 +786,6 @@ export function ControlCockpit({
             <Text style={styles.offlineMessage}>{zh ? '退出控制页并前往设备页建立连接' : 'Exit control and connect from the Devices tab'}</Text>
           </View>
         )}
-        <View pointerEvents="none" style={styles.sceneShadeTop} />
-        <View pointerEvents="none" style={styles.sceneShadeBottom} />
         {scene === 'video' && connected ? <View style={styles.reticle}><View style={styles.reticleH} /><View style={styles.reticleV} /></View> : null}
       </View>
 
@@ -813,7 +819,7 @@ export function ControlCockpit({
         </View>
 
         <View style={styles.topGroup}>
-          <EmergencyStop />
+          <EmergencyStop postureToggle />
         </View>
       </View>
 
@@ -841,14 +847,29 @@ export function ControlCockpit({
             onPress={navigationCancelable ? confirmCancelNavigation : () => setScene('map')}
           />
         ) : null}
+        <View style={{ alignItems: 'center', gap: 4 }}>
         <CockpitButton
           icon="navigate-circle-outline"
           label={missionActive ? missionStateLabel(missionState, zh) : (zh ? '巡检任务' : 'Inspection')}
           active={missionActive}
           onPress={openInspectionPanel}
         />
+          <InspectionProgress zh={zh} />
+        </View>
         <CockpitButton icon="options-outline" label={zh ? '机器人动作' : 'Actions'} onPress={onOpenRobotActions} />
         <TravelSpeedControl />
+      </View>
+
+      <View pointerEvents="box-none" style={[styles.directControls, { bottom: Math.max(135, insets.bottom + 127) }]}>
+        <ControlAuthorityButton />
+        <PostureControl />
+        {missionActive ? <>
+          <CockpitButton icon={missionState === MISSION_STATE.PAUSED ? 'play' : 'pause'}
+            label={missionState === MISSION_STATE.PAUSED ? (zh ? '继续巡检' : 'Resume') : (zh ? '暂停巡检' : 'Pause')}
+            onPress={() => transport && !controlling && void runMissionControl((mid) =>
+              missionState === MISSION_STATE.PAUSED ? resumeMission(transport, mid) : pauseMission(transport, mid))} />
+          <CockpitButton icon="stop-circle-outline" label={zh ? '停止巡检' : 'Stop'} danger onPress={confirmCancelMission} />
+        </> : null}
       </View>
 
       {pendingMapGoal && scene === 'map' && !navigationActive ? (
@@ -897,6 +918,7 @@ export function ControlCockpit({
       ) : null}
 
       <View pointerEvents="none" style={styles.bottomCenterStatus}>
+        <CockpitTelemetry zh={zh} />
         <Text style={styles.bottomCenterTitle}>
           {scene === 'video'
             ? (zh ? '实时画面' : 'LIVE VIEW')
@@ -1079,8 +1101,6 @@ const styles = StyleSheet.create({
   offlineBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#061014' },
   offlineTitle: { color: theme.colors.textPrimary, fontSize: 19, fontWeight: '700' },
   offlineMessage: { color: theme.colors.textMuted, fontSize: 13 },
-  sceneShadeTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 92, backgroundColor: '#0206079A' },
-  sceneShadeBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 150, backgroundColor: '#02060768' },
   reticle: { position: 'absolute', left: '50%', top: '50%', width: 42, height: 42, marginLeft: -21, marginTop: -21, borderRadius: 21, borderWidth: 1, borderColor: '#FFFFFF38' },
   reticleH: { position: 'absolute', width: 12, height: 1, backgroundColor: '#FFFFFF60', top: 20, left: 15 },
   reticleV: { position: 'absolute', width: 1, height: 12, backgroundColor: '#FFFFFF60', top: 15, left: 20 },
@@ -1101,6 +1121,7 @@ const styles = StyleSheet.create({
   sceneSwitchText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' },
   sceneSwitchTextActive: { color: '#FFFFFF' },
   rightDock: { position: 'absolute', top: 92, flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
+  directControls: { position: 'absolute', alignSelf: 'center', maxWidth: '54%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 },
   hiddenLayoutManager: { position: 'absolute', width: 0, height: 0, overflow: 'hidden' },
   goalEditor: { position: 'absolute', alignSelf: 'center', minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.accentPrimary + 'AA', backgroundColor: '#071116F2' },
   goalEditorCopy: { minWidth: 128, paddingHorizontal: 3 },
@@ -1114,7 +1135,7 @@ const styles = StyleSheet.create({
   goalEditorSubmit: { height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 12, borderRadius: 9, backgroundColor: theme.colors.accentPrimary },
   goalEditorSubmitDisabled: { opacity: 0.45 },
   goalEditorSubmitText: { color: '#061014', fontSize: 10, fontWeight: '800' },
-  bottomCenterStatus: { position: 'absolute', bottom: 15, left: '35%', right: '35%', minHeight: 41, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FFFFFF18', backgroundColor: '#061014B8' },
+  bottomCenterStatus: { position: 'absolute', bottom: 15, left: '25%', right: '25%', minHeight: 41, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FFFFFF18', backgroundColor: '#061014B8' },
   bottomCenterTitle: { color: theme.colors.textMuted, fontSize: 8, fontWeight: '700', letterSpacing: 1 },
   bottomCenterValue: { color: theme.colors.textValue, fontFamily: 'SpaceMono', fontSize: 9, marginTop: 2 },
   demoPill: { position: 'absolute', bottom: 15, flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 38, paddingHorizontal: 11, borderRadius: 11, backgroundColor: '#2D2214DD', borderWidth: 1, borderColor: theme.colors.statusConnecting + '55' },

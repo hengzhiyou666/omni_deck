@@ -4,6 +4,8 @@ import type { TwistField } from '../lib/ros';
 export type AxisMap = Partial<Record<TwistField, number>>;
 
 interface CmdVelState {
+  postureInhibited: boolean;
+  setPostureInhibited: (value: boolean) => void;
   topics: Record<string, AxisMap>;
   setAxes: (topic: string, values: AxisMap) => void;
   clearAxes: (topic: string, fields: TwistField[]) => void;
@@ -11,6 +13,8 @@ interface CmdVelState {
 }
 
 export const useCmdVelStore = create<CmdVelState>((set) => ({
+  postureInhibited: false,
+  setPostureInhibited: (postureInhibited) => set({ postureInhibited }),
   topics: {},
   setAxes: (topic, values) =>
     set((s) => ({

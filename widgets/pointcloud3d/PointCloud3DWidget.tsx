@@ -85,10 +85,11 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
   const connectionStatus = useRosStore((state) => state.connection.status);
   const mappingActive = useMappingStore((state) => state.active);
   const sessionId = useMappingStore((state) => state.sessionId);
-  const topic = props?.config?.topic || '/cloud_registered_global';
+  const topic = props?.config?.topic || '/Laser_map';
   const mapFrame = String(props?.config?.mapFrame || OMNI_MAP_FRAME).replace(/^\//, '');
   const robotFrame = String(props?.config?.robotFrame || OMNI_BASE_FRAME).replace(/^\//, '');
-  const odomTopic = props?.config?.odomTopic || '/Odometry';
+  const odomTopic = props?.config?.odomTopic || '/omni/tf_manager/body_odom_global';
+  const fullMapSnapshot = topic === '/Laser_map';
   const viewMeters = Math.max(2, Number(props?.config?.viewMeters || DEFAULT_VIEW_METERS));
   const width = Math.max(1, props?.width || 300);
   const height = Math.max(1, props?.height || 300);
@@ -96,11 +97,13 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
 
   const accumulatorRef = useRef(new AdaptiveVoxelAccumulator(0.12, 60000));
   const tfTrackerRef = useRef(new TfPositionTracker());
+  const correctedBodyRef = useRef<{ point: Point3D; time: number } | null>(null);
   const robotPositionRef = useRef<Point3D>({ x: 0, y: 0, z: 0 });
   const hasTfPositionRef = useRef(false);
   const lastRenderRef = useRef(0);
   const frameCountRef = useRef(0);
   const [renderPoints, setRenderPoints] = useState<PointCloudPoint[]>([]);
+  const [recordedRoute, setRecordedRoute] = useState<PointCloudPoint[]>([]);
   const [robotPosition, setRobotPosition] = useState<Point3D>({ x: 0, y: 0, z: 0 });
   const [stats, setStats] = useState({
     frames: 0,
@@ -118,6 +121,8 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
     accumulatorRef.current.clear();
     frameCountRef.current = 0;
     setRenderPoints([]);
+    setRecordedRoute([]);
+    correctedBodyRef.current = null;
     tfTrackerRef.current.clear();
     robotPositionRef.current = { x: 0, y: 0, z: 0 };
     hasTfPositionRef.current = false;
@@ -145,12 +150,17 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
       const frameId = String(message?.header?.frame_id || '').replace(/^\//, '');
       if (!frameId) return;
       const decoded = parsePointCloud2(message);
-      if (decoded.length === 0) return;
+      if (decoded.length === 0) {
+        if (fullMapSnapshot) { accumulatorRef.current.clear(); setRenderPoints([]); }
+        return;
+      }
       // 建图时 FAST-LIO 的全局点云属于 omni_odom；由 omni_tf_manager 的
       // map->odom 真值转换后再累计，禁止仅改 frame_id 或混合坐标系。
       const incoming = tfTrackerRef.current.transformPointCloud(decoded, frameId, mapFrame);
       if (!incoming) return;
       const accumulator = accumulatorRef.current;
+      // A loop-corrected map is a replacement, not an incremental live scan.
+      if (fullMapSnapshot) accumulator.clear();
       accumulator.add(incoming);
       frameCountRef.current += 1;
       const now = Date.now();
@@ -171,7 +181,7 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
       const accumulator = accumulatorRef.current;
       setRenderPoints(accumulator.snapshot(MAX_RENDER_POINTS));
     };
-  }, [connectionStatus, transport, topic, mapFrame]);
+  }, [connectionStatus, transport, topic, mapFrame, fullMapSnapshot]);
 
   useEffect(() => {
     if (connectionStatus !== 'connected' || !transport) return;
@@ -185,12 +195,23 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
     const handleTf = (message: any) => {
       const tracker = tfTrackerRef.current;
       tracker.update(message);
-      const position = tracker.lookupPosition(mapFrame, robotFrame);
+      const corrected = correctedBodyRef.current;
+      const position = corrected && Date.now() - corrected.time < 2500
+        ? corrected.point : tracker.lookupPosition(mapFrame, robotFrame);
       if (position) {
         robotPositionRef.current = position;
         hasTfPositionRef.current = true;
+        setRobotPosition(position);
       }
     };
+    const correctedSub = transport.subscribe('/omni/slam/mapping_body_path', 'nav_msgs/msg/Path', (message: any) => {
+      if (!mappingActive || message?.header?.frame_id !== mapFrame) return;
+      const poses = message.poses;
+      const point = Array.isArray(poses) ? poses[poses.length - 1]?.pose?.position : null;
+      if (!point || ![point.x, point.y, point.z].every(Number.isFinite)) return;
+      correctedBodyRef.current = { point, time: Date.now() };
+      robotPositionRef.current = point; hasTfPositionRef.current = true; setRobotPosition(point);
+    });
     const tfSub = transport.subscribe('/tf', 'tf2_msgs/msg/TFMessage', handleTf);
     const staticTfSub = transport.subscribe('/tf_static', 'tf2_msgs/msg/TFMessage', handleTf);
     const odomSub = transport.subscribe(odomTopic, 'nav_msgs/msg/Odometry', (message) => {
@@ -211,12 +232,28 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
       if (resolved) robotPositionRef.current = resolved;
     });
     return () => {
+      correctedSub.unsubscribe();
       tfSub.unsubscribe();
       staticTfSub.unsubscribe();
       odomSub.unsubscribe();
       hasTfPositionRef.current = false;
     };
-  }, [connectionStatus, transport, mapFrame, robotFrame, odomTopic]);
+  }, [connectionStatus, transport, mapFrame, robotFrame, odomTopic, mappingActive]);
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected' || !transport) return;
+    const subscription = transport.subscribe('/omni/mission/recorded_path', 'nav_msgs/msg/Path', (message: any) => {
+      if (message?.header?.frame_id !== mapFrame || !Array.isArray(message.poses)) return;
+      const points: PointCloudPoint[] = [];
+      const stride = Math.max(1, Math.ceil(message.poses.length / 10000));
+      for (let i = 0; i < message.poses.length; i += stride) {
+        const p = message.poses[i]?.pose?.position;
+        if (p && [p.x, p.y, p.z].every(Number.isFinite)) points.push({ ...p, intensity: 0 });
+      }
+      setRecordedRoute(points);
+    }, 200);
+    return () => subscription.unsubscribe();
+  }, [connectionStatus, transport, mapFrame]);
 
   const beginOrbit = useCallback(() => {
     orbitStartRef.current = cameraRef.current;
@@ -294,6 +331,16 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
     [renderPoints, width, height, camera, robotPosition, viewMeters],
   );
 
+  const routePath = useMemo(() => {
+    const path = Skia.Path.Make();
+    const points = projectPointCloud(recordedRoute, width, height, { ...camera, target: robotPosition, viewMeters });
+    points.forEach((p, i) => { if (i === 0) path.moveTo(p.x, p.y); else path.lineTo(p.x, p.y); });
+    return path;
+  }, [recordedRoute, width, height, camera, robotPosition, viewMeters]);
+  const robotMarker = useMemo(() => projectPointCloud(
+    [{ ...robotPosition, intensity: 0 }], width, height, { ...camera, target: robotPosition, viewMeters },
+  )[0], [robotPosition, width, height, camera, viewMeters]);
+
   const projectedGoal = useMemo(() => {
     const marker = props.goalMarker;
     if (!marker || marker.frameId.replace(/^\//, '') !== OMNI_MAP_FRAME) return null;
@@ -341,6 +388,9 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
                 strokeWidth={1.6}
               />
             ))}
+            <Path path={routePath} color="#FFBA49" style="stroke" strokeWidth={3} />
+            {hasTfPositionRef.current && robotMarker ?
+              <Circle cx={robotMarker.x} cy={robotMarker.y} r={6} color="#FFFFFF" /> : null}
             {projectedGoal && (
               <Circle
                 cx={projectedGoal.x}
