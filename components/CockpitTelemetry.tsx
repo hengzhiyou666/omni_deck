@@ -106,7 +106,7 @@ export function CockpitTelemetry({ zh }: { zh: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  panel: { alignSelf: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#071116C0', gap: 3 },
-  text: { color: '#E7F0F1', fontSize: 11, textAlign: 'center' },
-  error: { color: '#FF8D83', fontSize: 11, textAlign: 'center' },
+  panel: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#071116C0', gap: 3 },
+  text: { color: '#E7F0F1', fontSize: 11, textAlign: 'left' },
+  error: { color: '#FF8D83', fontSize: 11, textAlign: 'left' },
 });

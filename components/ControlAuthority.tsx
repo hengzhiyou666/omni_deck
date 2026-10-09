@@ -119,7 +119,7 @@ export function ControlAuthoritySession() {
   return null;
 }
 
-export function ControlAuthorityButton({ compact = false }: { compact?: boolean }) {
+export function ControlAuthorityButton({ compact = false, cockpit = false }: { compact?: boolean; cockpit?: boolean }) {
   const connectionStatus = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -257,6 +257,7 @@ export function ControlAuthorityButton({ compact = false }: { compact?: boolean 
           styles.button,
           compact && styles.compactButton,
           { borderColor: color + '66', backgroundColor: color + '11' },
+          cockpit && { minHeight: 44, backgroundColor: '#18262D', borderRadius: 10 },
           disabled && styles.disabled,
         ]}
       >

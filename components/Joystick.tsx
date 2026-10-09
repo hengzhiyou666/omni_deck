@@ -371,18 +371,18 @@ export function Joystick(props?: Partial<WidgetProps>) {
       )}
 
       {gamepadConnected && (
-        <View style={styles.gamepadBadge}>
+        <View style={[styles.gamepadBadge, overlayMode && { top: 108, right: 12 }]}>
           <Text style={styles.gamepadBadgeText}>{t('joystick.gamepadDual')}</Text>
         </View>
       )}
       {controlBlocked ? (
-        <View style={[styles.statusBadge, styles.controlBlockedBadge]}>
+        <View style={[styles.statusBadge, styles.controlBlockedBadge, overlayMode && styles.overlayStatusBadge]}>
           <Text style={[styles.statusBadgeText, styles.controlBlockedText]} numberOfLines={1}>
             {t('joystick.takeControl')}
           </Text>
         </View>
       ) : requireLocoMode && locoStatus !== 'idle' ? (
-        <View style={styles.statusBadge}>
+        <View style={[styles.statusBadge, overlayMode && styles.overlayStatusBadge]}>
           <Text
             style={[styles.statusBadgeText, locoStatus === 'error' && styles.locoErrorText]}
             numberOfLines={1}
@@ -431,6 +431,7 @@ const styles = StyleSheet.create({
   readoutText: { flex: 1, fontFamily: 'SpaceMono', fontSize: 9, color: theme.colors.textMuted, textAlign: 'center' },
   gamepadBadge: { position: 'absolute', top: 4, right: 6, backgroundColor: theme.colors.accentPrimary + '26', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
   gamepadBadgeText: { fontFamily: 'SpaceMono', fontSize: 8, color: theme.colors.accentPrimary, fontWeight: '700' },
+  overlayStatusBadge: { top: 108, left: 12 },
   statusBadge: { position: 'absolute', top: 4, left: 6, backgroundColor: theme.colors.statusConnected + '22', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, maxWidth: '48%' },
   statusBadgeText: { fontFamily: 'SpaceMono', fontSize: 8, color: theme.colors.statusConnected, fontWeight: '700' },
   controlBlockedBadge: { backgroundColor: theme.colors.statusConnecting + '22' },

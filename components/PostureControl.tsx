@@ -9,7 +9,7 @@ export { POSTURE_COMMAND_TOPIC, POSTURE_STATUS_TOPIC, POSTURE_MESSAGE_TYPE,
   POSTURE_COMMANDS, buildPostureCommand, parsePostureStatus } from '../lib/posture-actions';
 export type { PostureCommand } from '../lib/posture-actions';
 
-export function PostureControl({ compact = false }: { compact?: boolean }) {
+export function PostureControl({ compact = false, cockpit = false }: { compact?: boolean; cockpit?: boolean }) {
   const status = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -41,6 +41,7 @@ export function PostureControl({ compact = false }: { compact?: boolean }) {
     <View style={styles.container}>
       <PostureButton
         compact={compact}
+        cockpit={cockpit}
         disabled={disabled}
         waiting={pending === 'stand'}
         icon="arrow-up-circle-outline"
@@ -49,6 +50,7 @@ export function PostureControl({ compact = false }: { compact?: boolean }) {
       />
       <PostureButton
         compact={compact}
+        cockpit={cockpit}
         disabled={disabled}
         waiting={pending === 'lieDown'}
         icon="arrow-down-circle-outline"
@@ -59,7 +61,8 @@ export function PostureControl({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function PostureButton({ compact, disabled, waiting, icon, label, onPress }: {
+function PostureButton({ cockpit, compact, disabled, waiting, icon, label, onPress }: {
+  cockpit: boolean;
   compact: boolean;
   disabled: boolean;
   waiting: boolean;
@@ -71,7 +74,7 @@ function PostureButton({ compact, disabled, waiting, icon, label, onPress }: {
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[styles.button, compact && styles.compactButton, disabled && styles.disabled]}
+      style={[styles.button, compact && styles.compactButton, cockpit && { backgroundColor: '#18262D', borderRadius: 10 }, disabled && styles.disabled]}
       disabled={disabled}
       onPress={onPress}
       activeOpacity={0.75}
