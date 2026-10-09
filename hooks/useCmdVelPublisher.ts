@@ -33,6 +33,11 @@ import { CONTROL_CLIENT_ID } from '../lib/control-authority';
 const _intervals = new Map<string, ReturnType<typeof setInterval>>();
 const _publishFns = new Map<string, Set<() => void>>();
 
+export function stopAllTeleop(): void {
+  useCmdVelStore.getState().clearAll();
+  for (const functions of _publishFns.values()) functions.values().next().value?.();
+}
+
 // Restart all active intervals when publish rate changes.
 // Set up once at module load time; runs for app lifetime.
 // Uses single-argument subscribe (works without subscribeWithSelector middleware)
@@ -180,7 +185,8 @@ export function useCmdVelPublisher(
       return;
     }
 
-    const axes = useCmdVelStore.getState().topics[topic] ?? {};
+    const commandState = useCmdVelStore.getState();
+    const axes = commandState.postureInhibited ? {} : commandState.topics[topic] ?? {};
     const twist = buildTwistFromAxes(axes);
     teleopSequenceRef.current += 1;
     const msg = publishAuthenticatedTeleop
@@ -252,6 +258,7 @@ export function useCmdVelPublisher(
   }, [topic]);
 
   const prepareLocomotion = useCallback(() => {
+    if (useCmdVelStore.getState().postureInhibited) return;
     if (!safetyPolicy.requireLocomotionMode || isDemoConnection || !transport ||
       status !== 'connected' ||
       controlBlocked) return;

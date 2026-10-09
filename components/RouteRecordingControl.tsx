@@ -70,13 +70,13 @@ export function RouteRecordingControl() {
 
   const phase = runtime?.phase ?? AUTONOMY_PHASE.IDLE;
   const synchronized = runtime !== null && !runtimeStale;
+  const mapping = runtime?.mode === AUTONOMY_MODE.MAPPING;
   const recording = runtime?.mode === AUTONOMY_MODE.ROUTE_RECORDING;
   const recordingStarting = runtime?.desired_mode === AUTONOMY_MODE.ROUTE_RECORDING &&
     phaseIsTransitioning(phase);
   // Manager 在 STARTING 前就发布稳定的 recording_operation_id。首个里程计
   // 尚未到达时也必须显示“结束录制”，否则用户会被困在启动等待阶段。
-  const recordingSessionActive = Boolean(recordingOperationId) &&
-    (recording || recordingStarting || phase === AUTONOMY_PHASE.ERROR);
+  const recordingSessionActive = Boolean(recordingOperationId);
   const recordingFinishable = recordingSessionActive &&
     phase !== AUTONOMY_PHASE.STOPPING && phase !== AUTONOMY_PHASE.CONFLICT;
   const runtimeFault = phase === AUTONOMY_PHASE.ERROR || phase === AUTONOMY_PHASE.CONFLICT;
@@ -94,7 +94,7 @@ export function RouteRecordingControl() {
   }, [runtime?.map_checksum, runtime?.map_id, runtime?.map_version]);
   const routeIdValid = ROUTE_ID_PATTERN.test(routeId.trim());
   const canStart = connected && synchronized && !phaseIsTransitioning(phase) &&
-    !runtimeFault && !recording && !missionActive && !navigationActive;
+    !runtimeFault && !recordingSessionActive && !recording && !missionActive && !navigationActive;
   const canFinish = connected && synchronized && recordingFinishable &&
     Boolean(recordingOperationId);
   const commandPending = pendingCommand?.kind === 'finish_route_recording' ||
@@ -109,11 +109,12 @@ export function RouteRecordingControl() {
   }, [currentMapIdentity, selectedMap, setupOpen, t]);
 
   const openSetup = useCallback(() => {
+    if (mapping) { setSelectedMap(null); setSetupOpen(true); return; }
     // 每次新建录制会话都查询机器人目录。runtime 身份只用于预选，不能跳过
     // 目录刷新，否则 current 指针变化后手机会继续使用旧版本。
     setSelectedMap(null);
     setMapPickerOpen(true);
-  }, []);
+  }, [mapping]);
 
   const closeSetup = useCallback(() => {
     setSetupOpen(false);
@@ -131,7 +132,7 @@ export function RouteRecordingControl() {
     const normalizedRouteId = routeId.trim();
     if (!transport || !runtimeStore.status || runtimeStore.stale ||
         !ROUTE_ID_PATTERN.test(normalizedRouteId)) return;
-    if (!isCompleteMapIdentity(selectedMap)) {
+    if (!mapping && !isCompleteMapIdentity(selectedMap)) {
       Alert.alert(t('routeRecording.failedTitle'), t('routeRecording.mapMissing'));
       return;
     }
@@ -143,9 +144,10 @@ export function RouteRecordingControl() {
     try {
       const response = await setAutonomyMode(transport, {
         desiredMode: AUTONOMY_MODE.ROUTE_RECORDING,
-        mapId: selectedMap.mapId,
-        mapVersion: selectedMap.mapVersion,
-        mapChecksum: selectedMap.mapChecksum,
+        mapId: mapping ? undefined : selectedMap!.mapId,
+        mapVersion: mapping ? undefined : selectedMap!.mapVersion,
+        mapChecksum: mapping ? undefined : selectedMap!.mapChecksum,
+        mappingSessionId: mapping ? `${runtimeStore.status.manager_epoch}:${runtimeStore.status.runtime_generation}` : undefined,
         routeId: normalizedRouteId,
       });
       useAutonomyRuntimeStore.getState().completeCommand(response);
@@ -165,7 +167,7 @@ export function RouteRecordingControl() {
       useAutonomyRuntimeStore.getState().failCommand(message);
       Alert.alert(t('routeRecording.failedTitle'), message);
     }
-  }, [routeId, selectedMap, t, transport]);
+  }, [mapping, routeId, selectedMap, t, transport]);
 
   const requestFinish = useCallback(async (disposition: RouteRecordingDisposition) => {
     const runtimeStore = useAutonomyRuntimeStore.getState();
@@ -214,7 +216,8 @@ export function RouteRecordingControl() {
   }, [requestFinish, runtime?.route_has_unsaved_data, t]);
 
   const disabled = commandPending || (!canStart && !canFinish);
-  const label = recordingFinishable
+  const waitingForMap = mapping && runtime?.route_recording_state === 3;
+  const label = waitingForMap ? '路线已暂停录制，等待保存地图' : recordingFinishable
     ? t('routeRecording.recording', { count: runtime?.route_point_count ?? 0 })
     : recordingStarting || commandPending
       ? t('routeRecording.starting')
@@ -275,7 +278,7 @@ export function RouteRecordingControl() {
               showsVerticalScrollIndicator
             >
               <Text style={styles.dialogTitle}>{t('routeRecording.setupTitle')}</Text>
-              <View style={styles.mapSelection}>
+              {mapping ? <Text style={styles.dialogHint}>边建图边录路线；保存地图后，路线按回环优化后的坐标同步保存。</Text> : <View style={styles.mapSelection}>
                 <View style={styles.mapSelectionBody}>
                   <Text style={styles.fieldLabel}>{t('mapCatalog.selectedMap')}</Text>
                   <Text style={styles.mapSelectionValue} numberOfLines={1}>{mapLabel}</Text>
@@ -292,7 +295,7 @@ export function RouteRecordingControl() {
                 >
                   <Text style={styles.changeMapText}>{t('mapCatalog.change')}</Text>
                 </TouchableOpacity>
-              </View>
+              </View>}
               <Text style={styles.fieldLabel}>{t('routeRecording.routeId')}</Text>
               <TextInput
                 autoCapitalize="none"
@@ -315,10 +318,10 @@ export function RouteRecordingControl() {
                   <Text style={styles.secondaryButtonText}>{t('routeRecording.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  disabled={!routeIdValid || !canStart || !isCompleteMapIdentity(selectedMap)}
+                  disabled={!routeIdValid || !canStart || (!mapping && !isCompleteMapIdentity(selectedMap))}
                   style={[
                     styles.primaryButton,
-                    (!routeIdValid || !canStart || !isCompleteMapIdentity(selectedMap)) &&
+                    (!routeIdValid || !canStart || (!mapping && !isCompleteMapIdentity(selectedMap))) &&
                       styles.disabled,
                   ]}
                   onPress={() => void requestStart()}

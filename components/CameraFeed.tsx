@@ -126,7 +126,7 @@ function decodeToSkImage(data: any): SkImage | null {
   }
 }
 
-export function CameraFeed(props?: Partial<WidgetProps>) {
+export function CameraFeed(props?: Partial<WidgetProps> & { hideFps?: boolean }) {
   const cameraSource = props?.config?.source || "transport";
   const cameraTopic = props?.config?.topic || DEFAULTS.cameraTopic;
   const mjpegPort = props?.config?.mjpegPort || DEFAULTS.mjpegPort;
@@ -450,7 +450,7 @@ export function CameraFeed(props?: Partial<WidgetProps>) {
           format="h265"
           style={styles.video}
         />
-        <View style={styles.fpsOverlay}>
+        <View style={[styles.fpsOverlay, props?.hideFps && { display: 'none' }]}>
           <Text style={styles.fpsText}>{fps} FPS</Text>
         </View>
       </View>
@@ -471,7 +471,7 @@ export function CameraFeed(props?: Partial<WidgetProps>) {
           />
         )}
       </Canvas>
-      <View style={styles.fpsOverlay}>
+      <View style={[styles.fpsOverlay, props?.hideFps && { display: 'none' }]}>
         <Text style={styles.fpsText}>{fps} FPS</Text>
       </View>
     </View>

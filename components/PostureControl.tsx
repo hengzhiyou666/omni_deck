@@ -1,107 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { theme } from '../constants/theme';
 import { useTranslation, type TranslationKey } from '../lib/i18n';
 import { useRosStore } from '../stores/useRosStore';
-import { CONTROL_CLIENT_ID } from '../lib/control-authority';
-import { useControlAuthorityStore } from '../stores/useControlAuthorityStore';
-import { resetLocomotionModeState } from '../lib/locomotion-mode';
+import { requestPosture, usePostureStore, type PostureCommand } from '../lib/posture-actions';
+export { POSTURE_COMMAND_TOPIC, POSTURE_STATUS_TOPIC, POSTURE_MESSAGE_TYPE,
+  POSTURE_COMMANDS, buildPostureCommand, parsePostureStatus } from '../lib/posture-actions';
+export type { PostureCommand } from '../lib/posture-actions';
 
-export const POSTURE_COMMAND_TOPIC = '/rosdeck/posture_command';
-export const POSTURE_STATUS_TOPIC = '/rosdeck/posture_status';
-export const POSTURE_MESSAGE_TYPE = 'std_msgs/msg/String';
-export const POSTURE_COMMANDS = {
-  stand: { data: 'stand' },
-  lieDown: { data: 'lie_down' },
-} as const;
-
-export function buildPostureCommand(command: PostureCommand) {
-  return { data: `${POSTURE_COMMANDS[command].data}:${CONTROL_CLIENT_ID}` };
-}
-
-export type PostureCommand = keyof typeof POSTURE_COMMANDS;
-
-const ACK_TIMEOUT_MS = 10000;
-
-export function parsePostureStatus(message: any) {
-  if (typeof message?.data !== 'string') return null;
-  const [result, command, ...details] = message.data.split(':');
-  if ((result !== 'success' && result !== 'error') || !command) return null;
-  return { result, command, details: details.join(':') };
-}
-
-export function PostureControl({ compact = false }: { compact?: boolean }) {
+export function PostureControl({ compact = false, cockpit = false }: { compact?: boolean; cockpit?: boolean }) {
   const status = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
   const { t } = useTranslation();
-  const authorityStatus = useControlAuthorityStore((state) => state.status);
-  const authorityOwner = useControlAuthorityStore((state) => state.ownerId);
-  const [pending, setPending] = useState<PostureCommand | null>(null);
-  const pendingRef = useRef<PostureCommand | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearTimeoutRef = useCallback(() => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    pendingRef.current = pending;
-  }, [pending]);
-
-  useEffect(() => {
-    if (status !== 'connected' || !transport || url?.startsWith('demo://')) return;
-    const subscription = transport.subscribe(
-      POSTURE_STATUS_TOPIC,
-      POSTURE_MESSAGE_TYPE,
-      (message) => {
-        const parsed = parsePostureStatus(message);
-        const expected = pendingRef.current;
-        if (!parsed || !expected || parsed.command !== POSTURE_COMMANDS[expected].data) return;
-
-        clearTimeoutRef();
-        pendingRef.current = null;
-        setPending(null);
-        if (parsed.result === 'success') {
-          Alert.alert(
-            t('posture.successTitle'),
-            t(`posture.${expected}Success` as TranslationKey),
-          );
-        } else {
-          Alert.alert(
-            t('posture.failedTitle'),
-            t('posture.error', { message: parsed.details || 'unknown_error' }),
-          );
-        }
-      },
-    );
-    return () => subscription.unsubscribe();
-  }, [status, transport, url, clearTimeoutRef, t]);
-
-  useEffect(() => () => clearTimeoutRef(), [clearTimeoutRef]);
-
+  const pending = usePostureStore((state) => state.pending);
   const sendCommand = useCallback((command: PostureCommand) => {
-    if (status !== 'connected' || !transport || url?.startsWith('demo://')) {
-      Alert.alert(t('posture.failedTitle'), t('posture.disconnected'));
-      return;
-    }
-    pendingRef.current = command;
-    setPending(command);
-    resetLocomotionModeState();
-    transport.publish(
-      POSTURE_COMMAND_TOPIC,
-      POSTURE_MESSAGE_TYPE,
-      buildPostureCommand(command),
-    );
-    clearTimeoutRef();
-    timeoutRef.current = setTimeout(() => {
-      pendingRef.current = null;
-      setPending(null);
-      Alert.alert(t('posture.failedTitle'), t('posture.bridgeMissing'));
-    }, ACK_TIMEOUT_MS);
-  }, [status, transport, url, clearTimeoutRef, t]);
+    void requestPosture(command).catch((error) => {
+      Alert.alert(t('posture.failedTitle'), error instanceof Error ? error.message : String(error));
+    });
+  }, [t]);
 
   const confirmCommand = useCallback((command: PostureCommand) => {
     Alert.alert(
@@ -117,15 +35,13 @@ export function PostureControl({ compact = false }: { compact?: boolean }) {
     );
   }, [sendCommand, t]);
 
-  const authorityReady = authorityStatus === 'unsupported' ||
-    (authorityStatus === 'acquired' && authorityOwner === CONTROL_CLIENT_ID);
-  const disabled = status !== 'connected' || !transport || url?.startsWith('demo://') ||
-    !authorityReady || pending !== null;
+  const disabled = status !== 'connected' || !transport || url?.startsWith('demo://') || pending !== null;
 
   return (
     <View style={styles.container}>
       <PostureButton
         compact={compact}
+        cockpit={cockpit}
         disabled={disabled}
         waiting={pending === 'stand'}
         icon="arrow-up-circle-outline"
@@ -134,6 +50,7 @@ export function PostureControl({ compact = false }: { compact?: boolean }) {
       />
       <PostureButton
         compact={compact}
+        cockpit={cockpit}
         disabled={disabled}
         waiting={pending === 'lieDown'}
         icon="arrow-down-circle-outline"
@@ -144,7 +61,8 @@ export function PostureControl({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function PostureButton({ compact, disabled, waiting, icon, label, onPress }: {
+function PostureButton({ cockpit, compact, disabled, waiting, icon, label, onPress }: {
+  cockpit: boolean;
   compact: boolean;
   disabled: boolean;
   waiting: boolean;
@@ -156,7 +74,7 @@ function PostureButton({ compact, disabled, waiting, icon, label, onPress }: {
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[styles.button, compact && styles.compactButton, disabled && styles.disabled]}
+      style={[styles.button, compact && styles.compactButton, cockpit && { backgroundColor: '#18262D', borderRadius: 10 }, disabled && styles.disabled]}
       disabled={disabled}
       onPress={onPress}
       activeOpacity={0.75}

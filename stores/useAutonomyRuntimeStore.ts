@@ -67,12 +67,15 @@ export const useAutonomyRuntimeStore = create<AutonomyRuntimeStore>((set, get) =
       const managerRestarted = state.status !== null &&
         state.status.manager_epoch !== status.manager_epoch;
       const runtimeFailed = status.phase === AUTONOMY_PHASE.ERROR ||
-        status.phase === AUTONOMY_PHASE.CONFLICT;
+        status.phase === AUTONOMY_PHASE.CONFLICT || status.route_recording_state === 4 ||
+        status.route_recording_state === 5;
       const pending = managerRestarted ? null : state.pendingCommand;
       const operationMatches = Boolean(pending?.operationId) &&
         pending?.operationId === status.operation_id;
       const setModeFinished = pending?.kind === 'set_mode' && operationMatches && (
         runtimeFailed ||
+        (pending.desiredMode === AUTONOMY_MODE.ROUTE_RECORDING &&
+          status.mode === AUTONOMY_MODE.MAPPING && Boolean(status.recording_operation_id)) ||
         (pending.desiredMode === status.mode && (
           status.phase === AUTONOMY_PHASE.READY ||
           (status.mode === AUTONOMY_MODE.IDLE && status.phase === AUTONOMY_PHASE.IDLE)
@@ -118,7 +121,7 @@ export const useAutonomyRuntimeStore = create<AutonomyRuntimeStore>((set, get) =
         // 保留，保存失败后再次 DISCARD 仍只能指向原始录制会话。
         routeRecordingOperationId,
         // reason_text 在 STARTING 阶段也可用于进度说明，只有失败终态才是错误。
-        lastError: runtimeFailed ? status.reason_text || '自主运行时状态异常' : null,
+        lastError: runtimeFailed ? status.reason_text || '自主运行时状态异常' : state.lastError,
       };
     }),
 
