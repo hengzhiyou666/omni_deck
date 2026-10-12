@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { theme } from '../constants/theme';
@@ -12,6 +14,7 @@ interface Props {
 }
 
 export function TextScaleControls({ scale, onScaleChange }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -32,7 +35,7 @@ export function TextScaleControls({ scale, onScaleChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     gap: 2,

@@ -1,3 +1,5 @@
+import { useSettingsStore } from '../stores/useSettingsStore';
+import { useAppTheme } from '../hooks/useAppTheme';
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -7,6 +9,8 @@ import { useRosStore } from '../stores/useRosStore';
 import { theme } from '../constants/theme';
 
 export function BluetoothConnect() {
+  const theme = useAppTheme();
+  const zh = useSettingsStore(s => s.language) === 'zh';
   const router = useRouter();
   const [devices, setDevices] = useState<Record<string, { id: string; name: string; rssi: number }>>({});
   const [scanning, setScanning] = useState(false);
@@ -35,13 +39,13 @@ export function BluetoothConnect() {
       useRosStore.getState().setTransportType('ble');
       await useRosStore.getState().connectToUrl(`ble://${id}`);
       const { connection } = useRosStore.getState();
-      if (connection.status === 'connected') router.push('/(tabs)/control');
+      if (connection.status === 'connected') router.push('/(tabs)/device');
       else setError(connection.error ?? 'Bluetooth connection failed');
     } finally { setConnecting(false); }
   };
   return <View style={{ gap: 10 }}>
-    <ProductButton label={scanning ? '扫描中 / Scanning…' : '蓝牙扫描 / Bluetooth scan'} icon="bluetooth" onPress={scan} disabled={scanning || connecting} />
-    <Text style={{ color: theme.colors.textSecondary }}>蓝牙支持遥控、姿态和状态回传；视频与点云请使用 Wi-Fi。</Text>
+    <ProductButton label={scanning ? (zh ? '扫描中…' : 'Scanning…') : (zh ? '蓝牙扫描' : 'Bluetooth scan')} icon="bluetooth" onPress={scan} disabled={scanning || connecting} />
+    <Text style={{ color: theme.colors.textSecondary }}>{zh ? '蓝牙用于发现与配网；连接 Wi-Fi 后可查看视频和点云。' : 'Discover and configure over Bluetooth; connect Wi-Fi for video and point clouds.'}</Text>
     {Object.values(devices).map((device) => <ProductButton key={device.id}
       label={`${device.name} · ${device.rssi} dBm`} icon="bluetooth" disabled={connecting}
       onPress={() => void connect(device.id)} />)}

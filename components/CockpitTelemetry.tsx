@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { OMNI_BASE_FRAME, OMNI_MAP_FRAME, OMNI_ODOM_FRAME } from '../lib/frames';
@@ -17,6 +19,7 @@ const SLAM_NAMES = [
 type BodyPosition = { x: number; y: number; z: number; frame: string; received: number };
 
 export function CockpitTelemetry({ zh }: { zh: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const connection = useRosStore((s) => s.connection.status);
   const ble = useRosStore((s) => s.transportType === 'ble');
@@ -114,8 +117,8 @@ export function CockpitTelemetry({ zh }: { zh: boolean }) {
   );
 }
 
-const styles = StyleSheet.create({
-  panel: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#071116C0', gap: 3 },
-  text: { color: '#E7F0F1', fontSize: 11, textAlign: 'left' },
-  error: { color: '#FF8D83', fontSize: 11, textAlign: 'left' },
+const createStyles = (theme: AppTheme) => StyleSheet.create({
+  panel: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: theme.colors.bgElevated + 'EB', gap: 3 },
+  text: { color: theme.colors.textPrimary, fontSize: 11, textAlign: 'left' },
+  error: { color: theme.colors.statusError, fontSize: 11, textAlign: 'left' },
 });

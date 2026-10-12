@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useState } from 'react';
 import {
@@ -37,6 +39,7 @@ function phaseIsTransitioning(phase: number): boolean {
 }
 
 export function MappingControl({ compact = false }: { compact?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -280,7 +283,7 @@ export function MappingControl({ compact = false }: { compact?: boolean }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   controlBlock: { flex: 1, minWidth: 120, gap: 4 },
   compactControlBlock: { flex: 0, minWidth: 40 },
   button: {
@@ -402,5 +405,5 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: theme.colors.accentPrimary,
   },
-  primaryButtonText: { color: '#061014', fontWeight: '800' },
+  primaryButtonText: { color: theme.colors.onAccent, fontWeight: '800' },
 });

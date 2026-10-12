@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import * as Haptics from '../lib/haptics';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, Vibration, View } from 'react-native';
@@ -80,6 +82,7 @@ function JoystickPad({
   onEnd,
   overlay = false,
 }: PadProps) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const activeProgress = useSharedValue(0);
@@ -233,6 +236,7 @@ function JoystickPad({
 }
 
 export function Joystick(props?: Partial<WidgetProps>) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const cmdVelTopic = props?.config?.topic || DEFAULTS.cmdVelTopic;
   const useTwistStamped = props?.config?.useTwistStamped ?? defaultUsesTwistStamped(cmdVelTopic);
   const frameId = props?.config?.frameId || OMNI_BASE_FRAME;
@@ -402,7 +406,7 @@ export function Joystick(props?: Partial<WidgetProps>) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6 },
   padsRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', gap: 10 },
   padColumn: { alignItems: 'center' },
@@ -411,14 +415,14 @@ const styles = StyleSheet.create({
   base: { backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle, alignItems: 'center', justifyContent: 'center' },
   overlayContainer: { justifyContent: 'flex-end', paddingHorizontal: 22, paddingBottom: 15, paddingTop: 4 },
   overlayPadsRow: { justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 2 },
-  overlayPadCaption: { minWidth: 96, alignItems: 'center', borderRadius: 10, backgroundColor: '#061014B8', paddingHorizontal: 10, paddingTop: 5, paddingBottom: 4, marginBottom: 6, borderWidth: 1, borderColor: '#FFFFFF18' },
-  overlayPadLabel: { fontSize: 11, color: '#FFFFFF' },
-  overlayPadHint: { marginBottom: 0, color: '#B9C7CC' },
-  overlayBase: { backgroundColor: '#071116B8', borderColor: '#FFFFFF35', borderWidth: 1.5 },
-  crosshairH: { position: 'absolute', height: 1, backgroundColor: '#FFFFFF0A' },
-  crosshairV: { position: 'absolute', width: 1, backgroundColor: '#FFFFFF0A' },
-  referenceRing: { position: 'absolute', borderWidth: 1, borderColor: '#FFFFFF0B' },
-  centerDot: { position: 'absolute', width: 4, height: 4, borderRadius: 2, backgroundColor: '#FFFFFF18' },
+  overlayPadCaption: { minWidth: 96, alignItems: 'center', borderRadius: 10, backgroundColor: theme.colors.bgElevated + 'DC', paddingHorizontal: 10, paddingTop: 5, paddingBottom: 4, marginBottom: 6, borderWidth: 1, borderColor: theme.colors.borderSubtle },
+  overlayPadLabel: { fontSize: 11, color: theme.colors.textPrimary },
+  overlayPadHint: { marginBottom: 0, color: theme.colors.textSecondary },
+  overlayBase: { backgroundColor: theme.colors.bgElevated + 'C8', borderColor: theme.colors.borderDefault, borderWidth: 1.5 },
+  crosshairH: { position: 'absolute', height: 1, backgroundColor: theme.colors.overlayMedium },
+  crosshairV: { position: 'absolute', width: 1, backgroundColor: theme.colors.overlayMedium },
+  referenceRing: { position: 'absolute', borderWidth: 1, borderColor: theme.colors.overlayMedium },
+  centerDot: { position: 'absolute', width: 4, height: 4, borderRadius: 2, backgroundColor: theme.colors.borderSubtle },
   knob: {
     borderWidth: 1.5,
     borderColor: theme.colors.accentPrimary,
@@ -431,7 +435,7 @@ const styles = StyleSheet.create({
   readoutText: { flex: 1, fontFamily: 'SpaceMono', fontSize: 9, color: theme.colors.textMuted, textAlign: 'center' },
   gamepadBadge: { position: 'absolute', top: 4, right: 6, backgroundColor: theme.colors.accentPrimary + '26', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
   gamepadBadgeText: { fontFamily: 'SpaceMono', fontSize: 8, color: theme.colors.accentPrimary, fontWeight: '700' },
-  overlayStatusBadge: { top: 108, left: 12 },
+  overlayStatusBadge: { top: 124, left: 12 },
   statusBadge: { position: 'absolute', top: 4, left: 6, backgroundColor: theme.colors.statusConnected + '22', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, maxWidth: '48%' },
   statusBadgeText: { fontFamily: 'SpaceMono', fontSize: 8, color: theme.colors.statusConnected, fontWeight: '700' },
   controlBlockedBadge: { backgroundColor: theme.colors.statusConnecting + '22' },

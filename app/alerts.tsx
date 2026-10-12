@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -19,6 +21,7 @@ interface AlertItem {
 }
 
 export default function AlertsScreen() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const { pc, language } = useProductCopy();
   const status = useRosStore((s) => s.connection.status);
@@ -100,7 +103,7 @@ export default function AlertsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bgBase },
   header: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.borderSubtle },
   back: { width: 46, height: 46, borderRadius: theme.radius.md, alignItems: 'center', justifyContent: 'center' },

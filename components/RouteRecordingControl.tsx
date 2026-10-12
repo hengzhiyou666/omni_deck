@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -50,6 +52,7 @@ function phaseIsTransitioning(phase: number): boolean {
  * 负责，APP 仅根据权威快照展示点数、距离与未保存状态。
  */
 export function RouteRecordingControl() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -348,7 +351,7 @@ export function RouteRecordingControl() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   controlBlock: { flex: 1, minWidth: 190, gap: 4 },
   button: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 14, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.accentPrimary + '66', backgroundColor: theme.colors.accentPrimary + '11' },
   recordingButton: { borderColor: theme.colors.statusError + '88', backgroundColor: theme.colors.statusErrorGlow },
@@ -376,5 +379,5 @@ const styles = StyleSheet.create({
   secondaryButton: { minHeight: 42, minWidth: 90, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: theme.colors.borderDefault },
   secondaryButtonText: { color: theme.colors.textSecondary, fontWeight: '700' },
   primaryButton: { minHeight: 42, minWidth: 120, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: theme.colors.accentPrimary },
-  primaryButtonText: { color: '#061014', fontWeight: '800' },
+  primaryButtonText: { color: theme.colors.onAccent, fontWeight: '800' },
 });

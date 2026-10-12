@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -120,6 +122,7 @@ export function ControlAuthoritySession() {
 }
 
 export function ControlAuthorityButton({ compact = false, cockpit = false }: { compact?: boolean; cockpit?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -257,7 +260,7 @@ export function ControlAuthorityButton({ compact = false, cockpit = false }: { c
           styles.button,
           compact && styles.compactButton,
           { borderColor: color + '66', backgroundColor: color + '11' },
-          cockpit && { minHeight: 44, backgroundColor: '#18262D', borderRadius: 10 },
+          cockpit && { minHeight: 44, backgroundColor: theme.colors.bgSurface, borderRadius: 10 },
           disabled && styles.disabled,
         ]}
       >
@@ -273,7 +276,7 @@ export function ControlAuthorityButton({ compact = false, cockpit = false }: { c
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { flexDirection: 'row' },
   button: {
     flexDirection: 'row',

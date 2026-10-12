@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -59,6 +61,7 @@ function missionStateText(state: number, language: 'en' | 'zh'): string {
 }
 
 export default function HomeScreen() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const { pc, language } = useProductCopy();
   const { isLandscape } = useOrientation();
@@ -270,6 +273,7 @@ export default function HomeScreen() {
 }
 
 function WorkspaceTile({ icon, title, subtitle, onPress }: { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string; onPress: () => void }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <TouchableOpacity style={styles.workspaceTile} onPress={onPress} activeOpacity={0.75}>
       <View style={styles.workspaceVisual}>
@@ -284,6 +288,7 @@ function WorkspaceTile({ icon, title, subtitle, onPress }: { icon: keyof typeof 
 }
 
 function QuickAction({ icon, label, onPress, disabled = false }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; disabled?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <TouchableOpacity style={[styles.quickAction, disabled && styles.disabled]} onPress={onPress} disabled={disabled} activeOpacity={0.72}>
       <View style={styles.quickIcon}><Ionicons name={icon} size={21} color={theme.colors.textPrimary} /></View>
@@ -292,7 +297,7 @@ function QuickAction({ icon, label, onPress, disabled = false }: { icon: keyof t
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bgBase },
   content: { paddingHorizontal: 18, paddingBottom: 28, width: '100%', maxWidth: theme.sizes.contentMax, alignSelf: 'center' },
   contentLandscape: { paddingHorizontal: 24 },

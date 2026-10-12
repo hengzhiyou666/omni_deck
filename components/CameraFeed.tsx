@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from "@expo/vector-icons";
 import type { SkImage } from "@shopify/react-native-skia";
 import { Canvas, Skia, Image as SkiaImage } from "@shopify/react-native-skia";
@@ -127,6 +129,15 @@ function decodeToSkImage(data: any): SkImage | null {
 }
 
 export function CameraFeed(props?: Partial<WidgetProps> & { hideFps?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
+  const enabled = useSettingsStore(s => s.videoEnabled);
+  const zh = useSettingsStore(s => s.language) === 'zh';
+  return enabled ? <CameraFeedContent {...props} /> : <View style={[styles.container, { backgroundColor: theme.colors.bgBase, alignItems: 'center', justifyContent: 'center' }]}>
+    <Text style={{ position: 'absolute', top: '34%', left: 20, right: 20, color: theme.colors.textMuted, textAlign: 'center' }}>{zh ? '视频传输已关闭' : 'Video transmission is off'}</Text>
+  </View>;
+}
+function CameraFeedContent(props?: Partial<WidgetProps> & { hideFps?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const cameraSource = props?.config?.source || "transport";
   const cameraTopic = props?.config?.topic || DEFAULTS.cameraTopic;
   const mjpegPort = props?.config?.mjpegPort || DEFAULTS.mjpegPort;
@@ -478,7 +489,7 @@ export function CameraFeed(props?: Partial<WidgetProps> & { hideFps?: boolean })
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000000",

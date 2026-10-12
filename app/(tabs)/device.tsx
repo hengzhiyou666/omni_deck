@@ -1,8 +1,11 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { NetworkSettings } from '../../components/NetworkSettings';
 import { BluetoothConnect } from '../../components/BluetoothConnect';
 import { ConnectionForm } from '../../components/ConnectionForm';
 import { ProductButton, ProductCard, ProductHeader, SectionHeader, StatusPill } from '../../components/ProductUI';
@@ -20,6 +23,7 @@ function displayHost(url: string): string {
 }
 
 export default function DeviceScreen() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const { pc } = useProductCopy();
   const { isLandscape } = useOrientation();
@@ -27,6 +31,8 @@ export default function DeviceScreen() {
   const transportType = useRosStore((s) => s.transportType);
   const disconnect = useRosStore((s) => s.disconnect);
   const [showGuide, setShowGuide] = useState(false);
+  const [showNetwork, setShowNetwork] = useState(false);
+  useEffect(() => { if (connection.status === 'connected' && transportType === 'ble') setShowNetwork(true); }, [connection.status, transportType]);
   const connected = connection.status === 'connected';
   const demo = connection.url.startsWith('demo://');
 
@@ -57,7 +63,7 @@ export default function DeviceScreen() {
       />
       <ScrollView contentContainerStyle={[styles.content, isLandscape && styles.landscapeContent]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={[styles.columns, isLandscape && styles.columnsLandscape]}>
-          <View style={styles.column}>
+          <View style={[styles.column, isLandscape && { flex: 1 }]}>
             {connected ? (
               <>
                 <SectionHeader title={pc('device.active')} />
@@ -84,10 +90,11 @@ export default function DeviceScreen() {
             <ProductCard style={styles.formCard}>
               <ConnectionForm />
               <BluetoothConnect />
+              <ProductButton label={pc('tabs.settings') === '设置' ? '网络与传输' : 'Network & streaming'} icon="wifi-outline" variant="secondary" onPress={() => setShowNetwork(true)} />
             </ProductCard>
           </View>
 
-          <View style={styles.column}>
+          <View style={[styles.column, isLandscape && { flex: 1 }]}>
             <SectionHeader title={pc('device.demo')} />
             <ProductCard>
               <View style={styles.demoTop}>
@@ -119,18 +126,26 @@ export default function DeviceScreen() {
           </View>
         </View>
       </ScrollView>
+      <Modal visible={showNetwork} animationType="slide" onRequestClose={() => setShowNetwork(false)}>
+        <SafeAreaView style={styles.safe}>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <ProductButton label={pc('tabs.settings') === '设置' ? '返回设备' : 'Back to device'} icon="arrow-back" variant="ghost" onPress={() => setShowNetwork(false)} />
+            <NetworkSettings />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
       <SetupGuide visible={showGuide} onClose={() => setShowGuide(false)} onTryDemo={openDemo} />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bgBase },
   content: { paddingHorizontal: 18, paddingBottom: 32, width: '100%', maxWidth: theme.sizes.contentMax, alignSelf: 'center' },
   landscapeContent: { maxWidth: 1120, paddingHorizontal: 24 },
   columns: { flexDirection: 'column' },
   columnsLandscape: { flexDirection: 'row', gap: 20 },
-  column: { flex: 1, minWidth: 0 },
+  column: { minWidth: 0 },
   helpButton: { width: theme.sizes.touchTarget, height: theme.sizes.touchTarget, borderRadius: theme.radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.bgElevated, borderWidth: 1, borderColor: theme.colors.borderSubtle },
   activeTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   deviceIcon: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.accentPrimaryMuted },
@@ -140,7 +155,7 @@ const styles = StyleSheet.create({
   connectionDetail: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 16, paddingVertical: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: theme.colors.borderSubtle },
   connectionDetailText: { ...theme.typography.bodySm, color: theme.colors.textSecondary },
   sectionHint: { ...theme.typography.bodySm, color: theme.colors.textMuted, marginTop: -4, marginBottom: 10 },
-  formCard: { padding: 0, overflow: 'hidden' },
+  formCard: { padding: 16, overflow: 'hidden' },
   demoTop: { flexDirection: 'row', alignItems: 'center', gap: 13, marginBottom: 16 },
   demoIllustration: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.statusConnectingGlow },
   securityIcon: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.statusConnectedGlow },

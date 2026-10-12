@@ -1,3 +1,6 @@
+import { useSettingsStore } from '../../stores/useSettingsStore';
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import { Canvas, Circle, Path, Points, Skia, vec } from '@shopify/react-native-skia';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from '../../lib/haptics';
@@ -81,6 +84,8 @@ function projectByHeight(
 }
 
 export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
+  const { theme, styles } = useThemeStyles(createStyles);
+  const cloudEnabled = useSettingsStore(s => s.cloudEnabled);
   const transport = useRosStore((state) => state.transport);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const mappingActive = useMappingStore((state) => state.active);
@@ -103,6 +108,7 @@ export function PointCloud3DWidget(props: PointCloud3DWidgetRuntimeProps) {
   const lastRenderRef = useRef(0);
   const frameCountRef = useRef(0);
   const [renderPoints, setRenderPoints] = useState<PointCloudPoint[]>([]);
+  useEffect(() => { if (!cloudEnabled) { setRenderPoints([]); accumulatorRef.current.clear(); } }, [cloudEnabled]);
   const [recordedRoute, setRecordedRoute] = useState<PointCloudPoint[]>([]);
   const [robotPosition, setRobotPosition] = useState<Point3D>({ x: 0, y: 0, z: 0 });
   const [stats, setStats] = useState({
@@ -438,6 +444,7 @@ function ControlButton({ icon, onPress, destructive = false }: {
   onPress: () => void;
   destructive?: boolean;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <TouchableOpacity style={styles.controlButton} onPress={onPress} activeOpacity={0.7}>
       <Ionicons
@@ -449,7 +456,7 @@ function ControlButton({ icon, onPress, destructive = false }: {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
     overflow: 'hidden',

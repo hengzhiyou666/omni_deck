@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import React, { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { WidgetEmptyState } from "../../components/WidgetEmptyState";
@@ -36,6 +38,7 @@ interface BatteryState {
 }
 
 export function BatteryWidget(props: Partial<WidgetProps>) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const status = useRosStore((s) => s.connection.status);
   const topic = props?.config?.topic || "/battery_state";
@@ -133,6 +136,7 @@ export function BatteryWidget(props: Partial<WidgetProps>) {
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <View style={styles.cell}>
       <Text style={styles.cellLabel}>{label}</Text>
@@ -141,7 +145,7 @@ function MetricCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { backgroundColor: theme.colors.bgBase, overflow: "hidden" },
   header: {
     zIndex: 3,

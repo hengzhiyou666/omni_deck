@@ -1,3 +1,4 @@
+import { countPayload } from './network-traffic';
 import { robotBle, requestBlePermission } from '../modules/expo-robot-ble/src';
 import type { Subscription, TopicInfo, Transport, TransportStatus } from './transport';
 
@@ -47,6 +48,7 @@ export class BleTransport implements Transport {
     } catch (error) { this.disconnect(); throw error; }
   }
   private receive(data: string) {
+    countPayload('rx', data);
     let message: any;
     try { message = JSON.parse(data); } catch { return; }
     if (message.op === 'hello') {
@@ -64,7 +66,8 @@ export class BleTransport implements Transport {
   }
   private send(message: Record<string, unknown>) {
     if (this.status !== 'connected') return Promise.reject(new Error('Bluetooth disconnected'));
-    return robotBle!.write(JSON.stringify(message)) as Promise<void>;
+    const data = JSON.stringify(message);
+    return robotBle!.write(data).then(() => { countPayload('tx', data); }) as Promise<void>;
   }
   subscribe(topic: string, _type: string, callback: (msg: any) => void): Subscription {
     // Unsupported large-data topics are absent; never transfer video/cloud over BLE.
@@ -114,6 +117,16 @@ export class BleTransport implements Transport {
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('Bluetooth service timed out')); }, options?.timeoutMs ?? 10000);
       this.pending.set(id, { resolve, reject, timer });
       this.send({ op: 'call_service', id, service, args }).catch((error: Error) => {
+        clearTimeout(timer); this.pending.delete(id); reject(error);
+      });
+    });
+  }
+  requestNetwork(args: Record<string, unknown>): Promise<any> {
+    const id = String(++this.sequence);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('配网超时，请刷新状态 / Network request timed out')); }, 50000);
+      this.pending.set(id, { resolve, reject, timer });
+      this.send({ op: 'network', id, args }).catch((error: Error) => {
         clearTimeout(timer); this.pending.delete(id); reject(error);
       });
     });

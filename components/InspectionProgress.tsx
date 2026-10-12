@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { useMissionStore } from '../stores/useMissionStore';
@@ -18,6 +20,7 @@ const STAGES: Record<string, string> = {
 
 /** Stage text is supplied by the robot; no timer-based simulated progress. */
 export function InspectionProgress({ zh }: { zh: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const mission = useMissionStore((s) => s.status);
   const stale = useMissionStore((s) => s.missionStatusStale);
   const runtime = useAutonomyRuntimeStore((s) => s.status);
@@ -32,8 +35,8 @@ export function InspectionProgress({ zh }: { zh: boolean }) {
   return <Text accessibilityLiveRegion="polite" numberOfLines={3}
     style={[styles.text, (failed || stale) && styles.error]}>{zh ? STAGES[text] || text : text}</Text>;
 }
-const styles = StyleSheet.create({
-  text: { color: '#E7F0F1', fontSize: 11, maxWidth: 225, textAlign: 'center', padding: 4,
-    borderRadius: 6, backgroundColor: '#071116B0' },
-  error: { color: '#FF8D83' },
+const createStyles = (theme: AppTheme) => StyleSheet.create({
+  text: { color: theme.colors.textPrimary, fontSize: 11, maxWidth: 225, textAlign: 'center', padding: 4,
+    borderRadius: 6, backgroundColor: theme.colors.bgElevated + 'EB' },
+  error: { color: theme.colors.statusError },
 });

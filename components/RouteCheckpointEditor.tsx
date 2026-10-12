@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -109,6 +111,7 @@ export function RouteCheckpointEditor({
   onCancel,
   onSaved,
 }: RouteCheckpointEditorProps) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((state) => state.transport);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const language = useSettingsStore((state) => state.language);
@@ -569,6 +572,7 @@ function NumericInput({
   decimal?: boolean;
   onChange: (value: number) => void;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <View style={styles.numericInput}>
       <TextInput
@@ -584,7 +588,7 @@ function NumericInput({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 8, backgroundColor: '#000000B8' },
   dialog: { width: 780, maxWidth: '98%', height: '94%', maxHeight: 760, borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.bgElevated, overflow: 'hidden' },
   header: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.borderSubtle },

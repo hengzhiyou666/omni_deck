@@ -5,7 +5,15 @@ const STORAGE_KEY = 'ros2mobile_settings';
 
 export type AppLanguage = 'en' | 'zh';
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 interface SettingsState {
+  videoEnabled: boolean;
+  cloudEnabled: boolean;
+  setVideoEnabled: (value: boolean) => void;
+  setCloudEnabled: (value: boolean) => void;
+  themeMode: ThemeMode;
+  setThemeMode: (value: ThemeMode) => void;
   language: AppLanguage;
   hapticsEnabled: boolean;
   keepAwake: boolean;
@@ -31,6 +39,9 @@ interface SettingsState {
 }
 
 const defaults = {
+  videoEnabled: true,
+  cloudEnabled: true,
+  themeMode: 'light' as ThemeMode,
   language: 'en' as AppLanguage,
   hapticsEnabled: true,
   keepAwake: true,
@@ -73,6 +84,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ loaded: true });
   },
 
+  setVideoEnabled: (value) => { set({ videoEnabled: value }); persistAll(get); },
+  setCloudEnabled: (value) => { set({ cloudEnabled: value }); persistAll(get); },
+  setThemeMode: (value) => { set({ themeMode: value }); persistAll(get); },
   setLanguage: (value) => { set({ language: value }); persistAll(get); },
 
   setHapticsEnabled: (value) => { set({ hapticsEnabled: value }); persistAll(get); },

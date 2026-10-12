@@ -37,6 +37,14 @@ describe('BLE cockpit transport', () => {
     one.unsubscribe(); expect(native.write.mock.calls.filter(([s]) => JSON.parse(s).op === 'unsubscribe')).toHaveLength(0);
     two.unsubscribe(); expect(native.write.mock.calls.filter(([s]) => JSON.parse(s).op === 'subscribe')).toHaveLength(1);
   });
+  it('uses a distinct network operation without sending any motion command', async () => {
+    const result = transport.requestNetwork({ action: 'scan' });
+    const sent = JSON.parse(native.write.mock.calls.at(-1)![0]);
+    expect(sent.op).toBe('network'); expect(sent.args).toEqual({ action: 'scan' });
+    receive({ op: 'service_response', id: sent.id, values: { networks: ['Office'] } });
+    await expect(result).resolves.toEqual({ networks: ['Office'] });
+    expect(native.write.mock.calls.map(([data]) => JSON.parse(data).op)).toEqual(['hello', 'network']);
+  });
   it('matches service responses and surfaces robot rejections', async () => {
     const pending = transport.callService('/omni/control/authority', '', { op: 0 });
     const sent = JSON.parse(native.write.mock.calls.at(-1)![0]);

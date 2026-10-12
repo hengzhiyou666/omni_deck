@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import React from 'react';
 import {
   View,
@@ -31,6 +33,9 @@ const ARRAY_LIMIT_OPTIONS = [8, 16, 32, 64];
 const DEADZONE_OPTIONS = [0.05, 0.1, 0.15, 0.2, 0.3];
 
 export default function SettingsScreen() {
+  const themeMode = useSettingsStore(s => s.themeMode);
+  const setThemeMode = useSettingsStore(s => s.setThemeMode);
+  const { theme, styles } = useThemeStyles(createStyles);
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const { t, language: activeLanguage } = useTranslation();
@@ -172,6 +177,7 @@ export default function SettingsScreen() {
               keepAwake: true,
               publishRateHz: 10,
               autoDetectTopics: true,
+              themeMode: 'light',
               fieldPickerDepth: 8,
               fieldPickerArrayLimit: 32,
               tabRailSide: 'left',
@@ -191,6 +197,18 @@ export default function SettingsScreen() {
     <>
       <Text style={styles.sectionTitle}>{t('settings.preferences')}</Text>
       <View style={styles.card}>
+        <Text style={styles.rowTitle}>{language === 'zh' ? '外观主题' : 'Appearance'}</Text>
+        <View style={styles.segmentedRow}>
+          {(['light', 'dark', 'system'] as const).map((mode, index) => <TouchableOpacity key={mode}
+            accessibilityRole="button" accessibilityState={{ selected: themeMode === mode }}
+            style={[styles.segmentButton, themeMode === mode && styles.segmentButtonActive]}
+            onPress={() => setThemeMode(mode)}>
+            <Text style={[styles.segmentText, themeMode === mode && styles.segmentTextActive]}>
+              {(language === 'zh' ? ['浅色', '深色', '跟随系统'] : ['Light', 'Dark', 'System'])[index]}
+            </Text>
+          </TouchableOpacity>)}
+        </View>
+        <View style={styles.divider} />
         <Text style={styles.rowTitle}>{t('settings.language')}</Text>
         <Text style={styles.rowSubtitle}>{t('settings.languageHint')}</Text>
         <View style={styles.segmentedRow}>
@@ -553,7 +571,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.bgBase,
@@ -657,7 +675,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   segmentTextActive: {
-    color: '#000',
+    color: theme.colors.onAccent,
     fontWeight: '700',
   },
   actionRow: {

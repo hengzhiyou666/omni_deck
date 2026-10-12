@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -19,6 +21,7 @@ const RATIO_STEP = 0.05;
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export function SplitDivider({ nodeId, direction }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const updateSplitRatio = useLayoutStore((s) => s.updateSplitRatio);
   const swapChildren = useLayoutStore((s) => s.swapChildren);
   const editMode = useLayoutStore((s) => s.editMode);
@@ -152,7 +155,7 @@ export function SplitDivider({ nodeId, direction }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   divider: {
     alignItems: "center",
     justifyContent: "center",

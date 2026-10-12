@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -10,6 +12,7 @@ export { POSTURE_COMMAND_TOPIC, POSTURE_STATUS_TOPIC, POSTURE_MESSAGE_TYPE,
 export type { PostureCommand } from '../lib/posture-actions';
 
 export function PostureControl({ compact = false, cockpit = false }: { compact?: boolean; cockpit?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const status = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -70,11 +73,12 @@ function PostureButton({ cockpit, compact, disabled, waiting, icon, label, onPre
   label: string;
   onPress: () => void;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[styles.button, compact && styles.compactButton, cockpit && { backgroundColor: '#18262D', borderRadius: 10 }, disabled && styles.disabled]}
+      style={[styles.button, compact && styles.compactButton, cockpit && { backgroundColor: theme.colors.bgSurface, borderRadius: 10 }, disabled && styles.disabled]}
       disabled={disabled}
       onPress={onPress}
       activeOpacity={0.75}
@@ -89,7 +93,7 @@ function PostureButton({ cockpit, compact, disabled, waiting, icon, label, onPre
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     gap: 8,

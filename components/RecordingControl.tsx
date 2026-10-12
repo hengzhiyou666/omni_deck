@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -5,6 +7,7 @@ import { useRosStore } from '../stores/useRosStore';
 import { parseRecordingStatus, recordingDuration, RECORDING_STATUS, requestRecording, type RecordingStatus } from '../lib/recording';
 
 export function RecordingControl({ zh }: { zh: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const connection = useRosStore((s) => s.connection);
   const [status, setStatus] = useState<RecordingStatus | null>(null);
@@ -46,7 +49,7 @@ export function RecordingControl({ zh }: { zh: boolean }) {
   return <View style={styles.container}>
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} disabled={disabled}
       onPress={() => void command()} style={[styles.button, recording && styles.recording, disabled && styles.disabled]}>
-      <Ionicons name={recording ? 'stop-circle-outline' : 'radio-button-on'} size={17} color="#FF7979" />
+      <Ionicons name={recording ? 'stop-circle-outline' : 'radio-button-on'} size={17} color={theme.colors.statusError} />
       <Text style={styles.text}>{label}</Text>
       {fresh && status && ['recording', 'stopping'].includes(status.state)
         ? <Text style={styles.time}>{recordingDuration(status.duration_sec)} · {(status.size_bytes / 1048576).toFixed(0)} MB</Text> : null}
@@ -59,10 +62,10 @@ export function RecordingControl({ zh }: { zh: boolean }) {
     </TouchableOpacity> : null}
   </View>;
 }
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { flex: 1, minWidth: 0, gap: 2 },
-  button: { minHeight: 44, paddingHorizontal: 9, gap: 5, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#FF797955', backgroundColor: '#18262D' },
-  recording: { backgroundColor: '#3B2229', borderColor: '#FF7979' },
-  disabled: { opacity: 0.5 }, text: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  time: { color: '#E8CDD0', fontSize: 10 }, detail: { fontSize: 10, color: '#FFCC8A', textAlign: 'center' },
+  button: { minHeight: 44, paddingHorizontal: 9, gap: 5, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: theme.colors.statusError + '66', backgroundColor: theme.colors.bgSurface },
+  recording: { backgroundColor: theme.colors.statusErrorGlow, borderColor: theme.colors.statusError },
+  disabled: { opacity: 0.5 }, text: { color: theme.colors.textPrimary, fontSize: 12, fontWeight: '700' },
+  time: { color: theme.colors.textSecondary, fontSize: 10 }, detail: { fontSize: 10, color: theme.colors.statusConnecting, textAlign: 'center' },
 });

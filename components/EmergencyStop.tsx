@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity } from 'react-native';
@@ -42,6 +44,7 @@ export function emergencyStopIsEnabled(
 }
 
 export function EmergencyStop({ compact = false, postureToggle = false }: { compact?: boolean; postureToggle?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const status = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -99,7 +102,7 @@ export function EmergencyStop({ compact = false, postureToggle = false }: { comp
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
