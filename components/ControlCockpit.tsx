@@ -826,7 +826,7 @@ export function ControlCockpit({
           <CockpitButton icon="settings-outline" label={zh ? '设置' : 'Settings'} onPress={() => Alert.alert(
             zh ? '控制台设置' : 'Cockpit settings', '', [
               { text: zh ? '画面设置' : 'View settings', onPress: () => setEditMode(true) },
-              { text: zh ? '机器人动作' : 'Robot actions', onPress: onOpenRobotActions },
+              { text: zh ? '建图 / 录制路径 / 机器人动作' : 'Mapping / Route recording / Robot actions', onPress: onOpenRobotActions },
               { text: zh ? '取消' : 'Cancel', style: 'cancel' },
             ])} />
           <EmergencyStop postureToggle />

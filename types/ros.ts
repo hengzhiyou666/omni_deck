@@ -5,7 +5,7 @@ export type CameraSource = 'mjpeg' | 'rosbridge';
 export interface SavedConnection {
   url: string;
   name?: string;
-  transport?: 'rosbridge' | 'foxglove' | 'demo';
+  transport?: 'rosbridge' | 'foxglove' | 'demo' | 'ble';
   lastUsed: number;
 }
 

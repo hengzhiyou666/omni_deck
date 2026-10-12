@@ -98,23 +98,29 @@ export async function requestPosture(command: PostureCommand): Promise<void> {
   useCmdVelStore.getState().setPostureInhibited(true);
   stopAllTeleop();
   try {
-    const mission = useMissionStore.getState();
-    if (mission.missionStatusStale || !mission.status)
-      throw new Error('巡检状态未更新，无法确认当前任务 / Mission status is stale');
-    const active = ACTIVE_MISSION_STATES.includes(mission.status.state);
-    if (command === 'lieDown' && active) {
-      const id = mission.status.mission_id;
-      if (mission.status.state !== MISSION_STATE.PAUSED) {
-        const result = await pauseMission(transport, id);
-        if (!result.accepted) throw new Error(result.reason_text || '暂停巡检失败');
-        await waitFor(transport, expected, () => {
-          const current = useMissionStore.getState();
-          return !current.missionStatusStale && current.status?.mission_id === id && current.status.state === MISSION_STATE.PAUSED;
-        }, '等待暂停巡检确认超时 / Patrol pause timed out');
+    // A full-stack BLE gateway must pause active missions just like Wi-Fi.
+    // Older manual-only gateways advertise no mission topic.
+    const hasMission = !robot.connection.url.startsWith('ble://') ||
+      (await transport.getTopics()).some((topic) => topic.name === '/omni/mission/status');
+    if (hasMission) {
+      const mission = useMissionStore.getState();
+      if (mission.missionStatusStale || !mission.status)
+        throw new Error('巡检状态未更新，无法确认当前任务 / Mission status is stale');
+      const active = ACTIVE_MISSION_STATES.includes(mission.status.state);
+      if (command === 'lieDown' && active) {
+        const id = mission.status.mission_id;
+        if (mission.status.state !== MISSION_STATE.PAUSED) {
+          const result = await pauseMission(transport, id);
+          if (!result.accepted) throw new Error(result.reason_text || '暂停巡检失败');
+          await waitFor(transport, expected, () => {
+            const current = useMissionStore.getState();
+            return !current.missionStatusStale && current.status?.mission_id === id && current.status.state === MISSION_STATE.PAUSED;
+          }, '等待暂停巡检确认超时 / Patrol pause timed out');
+        }
+        usePostureStore.setState({ pausedMission: id });
+      } else if (command === 'stand' && active && mission.status.state !== MISSION_STATE.PAUSED) {
+        throw new Error('请先暂停巡检 / Pause patrol first');
       }
-      usePostureStore.setState({ pausedMission: id });
-    } else if (command === 'stand' && active && mission.status.state !== MISSION_STATE.PAUSED) {
-      throw new Error('请先暂停巡检 / Pause patrol first');
     }
     checkSession(transport, expected);
     let authority = useControlAuthorityStore.getState();

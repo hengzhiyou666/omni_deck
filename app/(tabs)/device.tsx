@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BluetoothConnect } from '../../components/BluetoothConnect';
 import { ConnectionForm } from '../../components/ConnectionForm';
 import { ProductButton, ProductCard, ProductHeader, SectionHeader, StatusPill } from '../../components/ProductUI';
 import { SavedConnections } from '../../components/SavedConnections';
@@ -71,7 +72,7 @@ export default function DeviceScreen() {
                   </View>
                   <View style={styles.connectionDetail}>
                     <Ionicons name="git-network-outline" size={17} color={theme.colors.textMuted} />
-                    <Text style={styles.connectionDetailText}>{pc('device.connectedVia', { transport: transportType === 'foxglove' ? 'Foxglove' : demo ? 'Demo' : 'Rosbridge' })}</Text>
+                    <Text style={styles.connectionDetailText}>{pc('device.connectedVia', { transport: transportType === 'ble' ? 'Bluetooth' : transportType === 'foxglove' ? 'Foxglove' : demo ? 'Demo' : 'Rosbridge' })}</Text>
                   </View>
                   <ProductButton label={pc('device.disconnect')} icon="power-outline" variant="danger" onPress={disconnect} />
                 </ProductCard>
@@ -82,6 +83,7 @@ export default function DeviceScreen() {
             <Text style={styles.sectionHint}>{pc('device.addHint')}</Text>
             <ProductCard style={styles.formCard}>
               <ConnectionForm />
+              <BluetoothConnect />
             </ProductCard>
           </View>
 

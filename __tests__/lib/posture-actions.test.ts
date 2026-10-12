@@ -87,4 +87,27 @@ describe('shared posture and patrol transaction (mock transport, no robot)', () 
     await expect(togglePostureStop()).rejects.toThrow('Mission status is stale');
     expect(events).toEqual([]);
   });
+  it('allows manual BLE posture with confirmed APP authority without Mission Manager', async () => {
+    useRosStore.setState({ connection: { url: 'ble://2C:F8:EC:7C:22:95', status: 'connected', error: null, ros: null } });
+    useMissionStore.setState({ status: null, missionStatusStale: true });
+    await requestPosture('stand');
+    await togglePostureStop();
+    await togglePostureStop();
+    expect(events).toEqual(['stand', 'lie_down', 'stand']);
+    expect(transport.callService).not.toHaveBeenCalled();
+  });
+  it('pauses and resumes an active patrol through the full-stack BLE gateway', async () => {
+    useRosStore.setState({ connection: { url: 'ble://dog4', status: 'connected', error: null, ros: null } });
+    transport.getTopics = async () => [{ name: '/omni/mission/status', type: 'omni_robot_interfaces/msg/MissionStatus' }, { name: '/rosdeck/locomotion_status', type: 'std_msgs/msg/String' }];
+    mission(MISSION_STATE.EXECUTING);
+    await togglePostureStop(); await togglePostureStop();
+    expect(events).toEqual(['pause', 'lie_down', 'stand', 'loco', 'resume']);
+  });
+  it('rejects posture on full-stack BLE when mission status is stale', async () => {
+    useRosStore.setState({ connection: { url: 'ble://dog4', status: 'connected', error: null, ros: null } });
+    transport.getTopics = async () => [{ name: '/omni/mission/status', type: 'omni_robot_interfaces/msg/MissionStatus' }, { name: '/rosdeck/locomotion_status', type: 'std_msgs/msg/String' }];
+    useMissionStore.setState({ status: null, missionStatusStale: true });
+    await expect(requestPosture('stand')).rejects.toThrow('Mission status is stale');
+    expect(events).toEqual([]);
+  });
 });

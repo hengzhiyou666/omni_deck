@@ -19,6 +19,7 @@ type BodyPosition = { x: number; y: number; z: number; frame: string; received: 
 export function CockpitTelemetry({ zh }: { zh: boolean }) {
   const transport = useRosStore((s) => s.transport);
   const connection = useRosStore((s) => s.connection.status);
+  const ble = useRosStore((s) => s.transportType === 'ble');
   const battery = useMissionStore((s) => s.robotStrip?.battery_percentage);
   const robotStale = useMissionStore((s) => s.robotStateStale);
   const authority = useControlAuthorityStore((s) => s.status);
@@ -28,6 +29,7 @@ export function CockpitTelemetry({ zh }: { zh: boolean }) {
   const [global, setGlobal] = useState<BodyPosition | null>(null);
   const [local, setLocal] = useState<BodyPosition | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [bleBattery, setBleBattery] = useState<{ value: number; received: number } | null>(null);
   const [slamError, setSlamError] = useState('');
   useEffect(() => {
     if (runtimeError) Alert.alert(zh ? '建图／路线任务异常' : 'Mapping / route error', runtimeError);
@@ -38,7 +40,7 @@ export function CockpitTelemetry({ zh }: { zh: boolean }) {
   }, [slamError]);
 
   useEffect(() => {
-    setSlam(null); setGlobal(null); setLocal(null); setSlamError('');
+    setSlam(null); setGlobal(null); setLocal(null); setSlamError(''); setBleBattery(null);
     let active = true;
     if (!transport || connection !== 'connected') return;
     const subscribePose = (topic: string, frame: string, update: (p: BodyPosition) => void) =>
@@ -69,9 +71,15 @@ export function CockpitTelemetry({ zh }: { zh: boolean }) {
         setSlam({ state: message.state, reason: message.reason_text || '', received: Date.now() });
       }),
     ];
+    if (ble) {
+      subscriptions.push(transport.subscribe('/battery_state', 'sensor_msgs/msg/BatteryState', (msg) => {
+        if (active && Number.isFinite(msg?.percentage) && msg.percentage >= 0 && msg.percentage <= 1)
+          setBleBattery({ value: msg.percentage * 100, received: Date.now() });
+      }));
+    }
     const timer = setInterval(() => setNow(Date.now()), 500);
     return () => { active = false; subscriptions.forEach((s) => s.unsubscribe()); clearInterval(timer); };
-  }, [transport, connection]);
+  }, [transport, connection, ble]);
 
   const connected = connection === 'connected';
   const slamFresh = connected && slam && now - slam.received < 3500;
@@ -87,7 +95,8 @@ export function CockpitTelemetry({ zh }: { zh: boolean }) {
     cooldown: '等待释放', error: '控制权异常', disconnected: '未连接', unsupported: '不支持控制权',
   } : {};
   const error = runtimeError || slamError;
-  const batteryText = connected && !robotStale && Number.isFinite(battery) && battery! >= 0 && battery! <= 100
+  const batteryText = connected && ble && bleBattery && now - bleBattery.received < 15000 ? `${Math.round(bleBattery.value)}%`
+    : connected && !robotStale && Number.isFinite(battery) && battery! >= 0 && battery! <= 100
     ? `${Math.round(battery!)}%` : '—';
   return (
     <View style={styles.panel} pointerEvents="none">
