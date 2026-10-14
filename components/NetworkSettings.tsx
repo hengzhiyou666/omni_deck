@@ -2,16 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Linking, Platform, Switch, Text, TextInput, View } from 'react-native';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { BleTransport } from '../lib/ble-transport';
+import { robotBle, requestWifiPermission } from '../modules/expo-robot-ble/src';
+import { parseHotspotConnection, waitForRobotControl } from '../lib/robot-hotspot';
 import { useRosStore } from '../stores/useRosStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { ProductButton, ProductCard, SectionHeader } from './ProductUI';
 import { TrafficPanel } from './TrafficPanel';
 
-export function NetworkSettings() {
+export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
   const theme = useAppTheme();
   const zh = useSettingsStore(s => s.language) === 'zh';
   const transport = useRosStore(s => s.transport);
   const connected = useRosStore(s => s.connection.status) === 'connected';
+  const [advanced, setAdvanced] = useState(false);
+  const [stage, setStage] = useState('');
+  const [ready, setReady] = useState(false);
+  const [hotspot, setHotspot] = useState<{ ssid: string; password: string; endpoint: string } | null>(null);
   const [mode, setMode] = useState<'hotspot' | 'wifi'>('hotspot');
   const [ssid, setSsid] = useState('dog4-0008');
   const [password, setPassword] = useState('');
@@ -21,6 +27,10 @@ export function NetworkSettings() {
   const [endpoint, setEndpoint] = useState('ws://192.168.50.1:8765');
   const [snapshot, setSnapshot] = useState<any>(null);
   const ble = transport instanceof BleTransport && connected;
+  useEffect(() => {
+    // Credentials belong to the selected robot, never to the next BLE device.
+    if (ble) { setHotspot(null); setReady(false); setNotice(''); }
+  }, [transport, ble]);
   useEffect(() => {
     setSnapshot(null);
     if (!connected || !transport) return;
@@ -40,6 +50,7 @@ export function NetworkSettings() {
       else {
         setPassword('');
         if (result.endpoint) setEndpoint(result.endpoint);
+        if (result.mode === 'hotspot' && result.password) setHotspot(parseHotspotConnection(result));
         setNotice(zh ? '配置成功。手机或电脑连接该 Wi-Fi 后，再连接下方地址。' : 'Configured. Join this Wi-Fi on your phone or PC, then connect below.');
       }
     } catch (e) { setNotice((e as Error).message); }
@@ -50,11 +61,53 @@ export function NetworkSettings() {
       { text: zh ? '取消' : 'Cancel', style: 'cancel' },
       { text: zh ? '应用' : 'Apply', onPress: () => void request(mode) },
     ]);
+  const connectData = async (address: string) => {
+    setStage(zh ? '正在连接狗端服务…' : 'Connecting robot services…');
+    useRosStore.getState().setTransportType('foxglove');
+    await useRosStore.getState().connectToUrl(address);
+    const current = useRosStore.getState();
+    if (current.connection.status !== 'connected' || !current.transport)
+      throw new Error(current.connection.error || 'Connection failed');
+    setStage(zh ? '正在确认控制服务…' : 'Checking control service…');
+    await waitForRobotControl(current.transport);
+    if (useRosStore.getState().transport !== current.transport) throw new Error('连接已更换 / Connection changed');
+    setReady(true);
+    setNotice(zh ? '连接就绪，可进入控制。' : 'Robot ready. Open controls.');
+  };
+  const quickConnect = async () => {
+    if (pending) return;
+    setPending(true); setNotice(''); setReady(false);
+    try {
+      await requestWifiPermission();
+      let details = hotspot;
+      if (transport instanceof BleTransport && connected) {
+        setStage(zh ? '正在开启狗子热点…' : 'Preparing robot hotspot…');
+        details = parseHotspotConnection(await transport.requestNetwork({ action: 'hotspot' }));
+        setHotspot(details); setEndpoint(details.endpoint);
+      }
+      if (!details) throw new Error(zh ? '请先扫描并连接狗子蓝牙' : 'Connect robot Bluetooth first');
+      setStage(zh ? '请在系统弹窗中确认连接热点…' : 'Confirm the system Wi-Fi connection prompt…');
+      await robotBle!.joinWifi(details.ssid, details.password, new URL(details.endpoint).hostname);
+      await connectData(details.endpoint);
+    } catch (error) { setNotice((error as Error).message); }
+    finally { setStage(''); setPending(false); }
+  };
   const inputStyle = { borderWidth: 1, borderColor: theme.colors.borderDefault, borderRadius: 10,
     padding: 12, color: theme.colors.textPrimary, backgroundColor: theme.colors.bgInset };
   return <>
     <SectionHeader title={zh ? '网络与传输' : 'Network & streaming'} />
     <ProductCard>
+      <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 18 }}>{zh ? '连接狗子热点' : 'Connect robot hotspot'}</Text>
+      <Text style={{ color: theme.colors.textSecondary, marginVertical: 12 }}>{zh ? '点击连接后，在系统弹窗中确认即可。热点密码、IP 和端口自动填写；请在狗子静止且任务停止时切换网络。' : 'Confirm the system prompt; password and robot address are filled automatically. Switch networks while the robot is idle.'}</Text>
+      <ProductButton label={pending ? (stage || (zh ? '正在配置…' : 'Configuring…')) : ready ? (zh ? '重新连接热点' : 'Reconnect hotspot') : (zh ? '一键连接热点' : 'Connect hotspot')}
+        icon="wifi-outline" disabled={pending || (!ble && !hotspot)} onPress={() => void quickConnect()} />
+      {!ble && !hotspot && <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>{zh ? '先返回设备页，扫描并连接狗子蓝牙。' : 'Scan and connect robot Bluetooth on the device page first.'}</Text>}
+      {!!notice && <Text selectable style={{ color: ready ? theme.colors.statusConnected : theme.colors.textSecondary, marginTop: 12 }}>{notice}</Text>}
+      {ready && connected && onConnected && <ProductButton label={zh ? '进入控制' : 'Open controls'} icon="game-controller-outline" onPress={onConnected} />}
+      {hotspot && <Text selectable style={{ color: theme.colors.textSecondary, marginTop: 12 }}>{zh ? '电脑连接同一热点：' : 'PC: join the same hotspot: '}{hotspot.ssid}{'\n'}{zh ? '热点密码：' : 'Password: '}{hotspot.password}{'\n'}{zh ? 'Foxglove 地址：' : 'Foxglove: '}{hotspot.endpoint}</Text>}
+    </ProductCard>
+    <ProductButton compact label={advanced ? (zh ? '收起其他连接方式' : 'Hide other connections') : (zh ? '外部 Wi-Fi / 手动连接' : 'External Wi-Fi / manual connection')} variant="ghost" disabled={pending} onPress={() => setAdvanced(!advanced)} />
+    {advanced && <ProductCard>
       <Text style={{ color: theme.colors.textSecondary }}>{zh ? '蓝牙负责配网；视频、点云和遥控通过 Wi-Fi 或安全远程网络传输。' : 'Provision over BLE; use Wi-Fi or a private remote network for video, clouds and control.'}</Text>
       <View style={{ flexDirection: 'row', gap: 8, marginVertical: 12 }}>
         <ProductButton compact label={zh ? '狗子热点' : 'Robot hotspot'} variant={mode === 'hotspot' ? 'primary' : 'secondary'} onPress={() => { setMode('hotspot'); setSsid('dog4-0008'); setPassword(''); }} />
@@ -72,13 +125,15 @@ export function NetworkSettings() {
         <ProductButton compact label={zh ? '打开手机 Wi-Fi 设置' : 'Open phone Wi-Fi settings'} variant="secondary" onPress={() => void (Platform.OS === 'android' ? Linking.sendIntent('android.settings.WIFI_SETTINGS') : Linking.openSettings()).catch(e => setNotice(String(e)))} />
         <Text style={{ color: theme.colors.textSecondary }}>{zh ? 'Wi-Fi / 远程 VPN 地址' : 'Wi-Fi / remote VPN address'}</Text>
         <TextInput accessibilityLabel="Robot network endpoint" style={inputStyle} value={endpoint} onChangeText={setEndpoint} autoCapitalize="none" autoCorrect={false} />
-        <ProductButton label={zh ? '连接数据通道' : 'Connect data channel'} icon="link-outline" disabled={pending} onPress={() => {
-          useRosStore.getState().setTransportType('foxglove');
-          void useRosStore.getState().connectToUrl(endpoint);
+        <ProductButton label={zh ? '连接数据通道' : 'Connect data channel'} icon="link-outline" disabled={pending} onPress={async () => {
+          setPending(true); setReady(false); setNotice('');
+          try { await connectData(endpoint); }
+          catch (error) { setNotice((error as Error).message); }
+          finally { setPending(false); setStage(''); }
         }} />
         <Text style={{ color: theme.colors.textMuted }}>{zh ? 'SIM 远程连接需手机、电脑和狗子加入同一 VPN。此处填写狗子的 VPN 地址:8765；SIM 套餐余量以运营商为准。' : 'For cellular access, join the same VPN on phone, PC and robot. Enter robot VPN address:8765. Carrier quota is provided by your operator.'}</Text>
       </View>
-    </ProductCard>
+    </ProductCard>}
     <TransmissionSettings />
     <TrafficPanel />
   </>;

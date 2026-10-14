@@ -26,6 +26,7 @@ class ExpoRobotBleModule : Module() {
   private var scanning = false
   private var ready = false
   private var payloadSize = 20
+  private var robotWifi: RobotWifi? = null
   private val incoming = ByteArrayOutputStream()
   private var incomingSequence = 0L
   private val fragments = mutableMapOf<Long, ByteArray>()
@@ -72,7 +73,19 @@ class ExpoRobotBleModule : Module() {
       }
     } }
     AsyncFunction("disconnect") { handler.post { close("Disconnected") }; Unit }
-    OnDestroy { handler.post { stopScan(); close("Module destroyed") } }
+    AsyncFunction("joinWifi") { ssid: String, password: String, host: String, promise: Promise -> handler.post {
+      val wifi = robotWifi ?: RobotWifi(appContext.reactContext!!).also { robotWifi = it }
+      wifi.join(ssid, password, host, promise)
+    } }
+    AsyncFunction("prepareNetworkEndpoint") { endpoint: String, promise: Promise -> handler.post {
+      robotWifi?.prepareEndpoint(endpoint)
+      promise.resolve(null)
+    } }
+    AsyncFunction("releaseWifi") { promise: Promise -> handler.post {
+      robotWifi?.release()
+      promise.resolve(null)
+    } }
+    OnDestroy { handler.post { robotWifi?.release(); stopScan(); close("Module destroyed") } }
   }
 
   private val scanner = object : ScanCallback() {

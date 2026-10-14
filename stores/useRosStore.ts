@@ -11,6 +11,7 @@ import { buildWebSocketUrl } from '../lib/ros';
 import { bestEffortReleaseControl } from '../lib/control-authority';
 import { parseConnectionInput } from '../lib/connection-url';
 import { usePairingStore } from './usePairingStore';
+import { robotBle } from '../modules/expo-robot-ble/src';
 
 interface ConnectionState {
   url: string;
@@ -254,6 +255,8 @@ export const useRosStore = create<RosStore>((set, get) => ({
     }
 
     try {
+      if (robotBle?.prepareNetworkEndpoint) await robotBle.prepareNetworkEndpoint(canonicalUrl);
+      if (get().transport !== transport) return;
       const loginOptions = transportType === 'foxglove' ? resolveLoginOptions(canonicalUrl) : undefined;
       await transport.connect(canonicalUrl, loginOptions);
       if (get().transport !== transport) {
@@ -339,6 +342,7 @@ export const useRosStore = create<RosStore>((set, get) => ({
     if (transport) {
       transport.disconnect();
     }
+    void robotBle?.releaseWifi?.();
   },
 
   reset: () =>

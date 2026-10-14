@@ -57,8 +57,9 @@ export function ControlAuthoritySession() {
     );
     const detectionTimeout = setTimeout(() => {
       if (useControlAuthorityStore.getState().status === 'detecting') {
-        // 旧 Bridge/VBot 不发布 typed authority；统一 teleop 对此状态保持失败关闭。
-        useControlAuthorityStore.getState().reset('unsupported');
+        // Missing telemetry cannot establish that the robot lacks authority
+        // support. Keep the subscription alive and recover when data arrives.
+        useControlAuthorityStore.getState().reset('stale');
       }
     }, DETECTION_TIMEOUT_MS);
 

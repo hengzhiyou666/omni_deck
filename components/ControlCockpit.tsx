@@ -60,6 +60,7 @@ import { useAutonomyRuntimeStore } from '../stores/useAutonomyRuntimeStore';
 import { useMissionStore } from '../stores/useMissionStore';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useRosStore } from '../stores/useRosStore';
+import { useControlAuthorityStore } from '../stores/useControlAuthorityStore';
 import { useNavigationFeed } from '../hooks/useNavigationFeed';
 import type { LayoutNode, SavedLayout, WidgetConfigField, WidgetNode } from '../types/layout';
 import { cameraWidget } from '../widgets/camera';
@@ -263,6 +264,9 @@ export function ControlCockpit({
   const navigationError = useNavigationStore((state) => state.lastError);
 
   const connected = status === 'connected' && Boolean(transport);
+  const authorityStatus = useControlAuthorityStore(state => state.status);
+  const controlServicePending = connected && !isDemo &&
+    ['disconnected', 'detecting', 'stale'].includes(authorityStatus);
   const missionConnected = connected && !isDemo;
   const missionState = mission?.state ?? MISSION_STATE.NONE;
   const missionActive = !missionStatusStale &&
@@ -811,9 +815,9 @@ export function ControlCockpit({
         <View style={styles.topGroup}>
           <CockpitButton icon="arrow-back" label={zh ? '退出' : 'Exit'} onPress={onExit} />
           <TouchableOpacity style={styles.connectionPill} onPress={() => Alert.alert(zh ? '连接信息' : 'Connection', url || '—')}>
-            <View style={[styles.connectionDot, { backgroundColor: connected ? theme.colors.statusConnected : theme.colors.statusError }]} />
+            <View style={[styles.connectionDot, { backgroundColor: controlServicePending ? theme.colors.statusConnecting : connected ? theme.colors.statusConnected : theme.colors.statusError }]} />
             <View>
-              <Text style={styles.connectionLabel}>{connected ? (zh ? '已连接' : 'Connected') : (zh ? '未连接' : 'Offline')}</Text>
+              <Text style={styles.connectionLabel}>{controlServicePending ? (zh ? '服务未就绪' : 'Services pending') : connected ? (zh ? '已连接' : 'Connected') : (zh ? '未连接' : 'Offline')}</Text>
 
             </View>
           </TouchableOpacity>

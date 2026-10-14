@@ -30,6 +30,7 @@ export default function DeviceScreen() {
   const connection = useRosStore((s) => s.connection);
   const transportType = useRosStore((s) => s.transportType);
   const disconnect = useRosStore((s) => s.disconnect);
+  const [showManual, setShowManual] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showNetwork, setShowNetwork] = useState(false);
   useEffect(() => { if (connection.status === 'connected' && transportType === 'ble') setShowNetwork(true); }, [connection.status, transportType]);
@@ -88,8 +89,9 @@ export default function DeviceScreen() {
             <SectionHeader title={pc('device.add')} />
             <Text style={styles.sectionHint}>{pc('device.addHint')}</Text>
             <ProductCard style={styles.formCard}>
-              <ConnectionForm />
               <BluetoothConnect />
+              <ProductButton label={pc('tabs.settings') === '设置' ? '手动输入连接地址' : 'Enter connection address'} variant="ghost" compact onPress={() => setShowManual(!showManual)} />
+              {showManual && <ConnectionForm />}
               <ProductButton label={pc('tabs.settings') === '设置' ? '网络与传输' : 'Network & streaming'} icon="wifi-outline" variant="secondary" onPress={() => setShowNetwork(true)} />
             </ProductCard>
           </View>
@@ -130,7 +132,7 @@ export default function DeviceScreen() {
         <SafeAreaView style={styles.safe}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <ProductButton label={pc('tabs.settings') === '设置' ? '返回设备' : 'Back to device'} icon="arrow-back" variant="ghost" onPress={() => setShowNetwork(false)} />
-            <NetworkSettings />
+            <NetworkSettings onConnected={() => { setShowNetwork(false); router.push('/(tabs)/control'); }} />
           </ScrollView>
         </SafeAreaView>
       </Modal>
