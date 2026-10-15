@@ -58,8 +58,9 @@ describe('ControlCockpit inspection entry', () => {
     expect(source).toMatch(/if \(!pendingMapGoal\) dispatchTouchMove/);
   });
 
-  it('does not introduce a second mapping control in the landscape cockpit', () => {
-    expect(source).not.toContain('MappingControl');
+  it('reuses the existing mapping and recording controls in the cockpit', () => {
+    expect(source).toContain('<MappingControl cockpit />');
+    expect(source).toContain('<RouteRecordingControl cockpit />');
     expect(source).not.toContain('start_3d_mapping');
   });
 });

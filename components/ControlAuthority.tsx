@@ -261,7 +261,7 @@ export function ControlAuthorityButton({ compact = false, cockpit = false }: { c
           styles.button,
           compact && styles.compactButton,
           { borderColor: color + '66', backgroundColor: color + '11' },
-          cockpit && { minHeight: 44, backgroundColor: theme.colors.bgSurface, borderRadius: 10 },
+          cockpit && { minHeight: 40, backgroundColor: theme.colors.bgSurface, borderRadius: 10 },
           disabled && styles.disabled,
         ]}
       >

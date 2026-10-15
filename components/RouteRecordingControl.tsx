@@ -51,7 +51,7 @@ function phaseIsTransitioning(phase: number): boolean {
  * 路线录制只提交 Mission 意图。地图绑定、录制状态和原子落盘均由机器人端
  * 负责，APP 仅根据权威快照展示点数、距离与未保存状态。
  */
-export function RouteRecordingControl() {
+export function RouteRecordingControl({ cockpit = false }: { cockpit?: boolean }) {
   const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
@@ -228,7 +228,7 @@ export function RouteRecordingControl() {
 
   return (
     <>
-      <View style={styles.controlBlock}>
+      <View style={[styles.controlBlock, cockpit && { minWidth: 0 }]}>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel={label}
@@ -237,6 +237,7 @@ export function RouteRecordingControl() {
           activeOpacity={0.75}
           style={[
             styles.button,
+            cockpit && { paddingHorizontal: 8, minHeight: 40 },
             recordingFinishable && styles.recordingButton,
             disabled && styles.disabled,
           ]}
@@ -246,16 +247,16 @@ export function RouteRecordingControl() {
             size={17}
             color={recordingFinishable ? theme.colors.statusError : theme.colors.accentPrimary}
           />
-          <Text style={[styles.buttonText, recordingFinishable && styles.recordingText]}>{label}</Text>
+          <Text style={[styles.buttonText, cockpit && { fontSize: 10 }, recordingFinishable && styles.recordingText]}>{label}</Text>
         </TouchableOpacity>
-        {recordingSessionActive ? (
+        {!cockpit && recordingSessionActive ? (
           <Text style={styles.assetText} numberOfLines={1}>
             {t('routeRecording.activeRoute', { route: runtime?.route_id || routeId })}
           </Text>
         ) : null}
-        <Text style={styles.assetText} numberOfLines={1}>
+        {!cockpit && <Text style={styles.assetText} numberOfLines={1}>
           {t('routeRecording.boundMap', { map: mapLabel })}
-        </Text>
+        </Text>}
         {recordingSessionActive ? (
           <Text style={runtime?.route_has_unsaved_data ? styles.unsavedText : styles.assetText}>
             {runtime?.route_has_unsaved_data

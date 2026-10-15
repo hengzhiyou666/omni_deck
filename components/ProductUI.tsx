@@ -278,7 +278,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderBottomColor: theme.colors.borderSubtle,
   },
   headerCopy: { flex: 1, minWidth: 0 },
-  headerTitle: { ...theme.typography.headingLg, color: theme.colors.textPrimary },
+  headerTitle: { ...theme.typography.headingLg, fontSize: 20, color: theme.colors.textPrimary },
   headerSubtitle: { ...theme.typography.bodySm, color: theme.colors.textMuted, marginTop: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   iconButton: {
@@ -341,7 +341,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   buttonDanger: { backgroundColor: theme.colors.statusErrorGlow, borderColor: theme.colors.statusError + '66' },
   buttonGhost: { backgroundColor: 'transparent', borderColor: 'transparent' },
   buttonDisabled: { opacity: 0.4 },
-  buttonText: { fontSize: 14, fontWeight: '700' },
+  buttonText: { fontSize: 13, fontWeight: '700' },
   notice: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -8,6 +8,7 @@ import { useRosStore } from '../stores/useRosStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { ProductButton, ProductCard, SectionHeader } from './ProductUI';
 import { TrafficPanel } from './TrafficPanel';
+import { BluetoothConnect } from './BluetoothConnect';
 
 export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
   const theme = useAppTheme();
@@ -45,19 +46,25 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
     if (!(transport instanceof BleTransport)) return;
     setPending(true); setNotice('');
     try {
+      if (action === 'wifi') { setReady(false); await requestWifiPermission(); }
       const result = await transport.requestNetwork({ action, ...(action === 'scan' ? {} : { ssid, password }) });
       if (result.networks) setNetworks(result.networks);
       else {
         setPassword('');
         if (result.endpoint) setEndpoint(result.endpoint);
         if (result.mode === 'hotspot' && result.password) setHotspot(parseHotspotConnection(result));
-        setNotice(zh ? '配置成功。手机或电脑连接该 Wi-Fi 后，再连接下方地址。' : 'Configured. Join this Wi-Fi on your phone or PC, then connect below.');
+        if (result.mode === 'wifi') {
+          setHotspot(null);
+          setNotice(zh ? `狗子已关闭热点并连接 ${ssid}。正在连接同一 Wi-Fi…` : `Hotspot closed. Robot joined ${ssid}. Joining the same Wi-Fi…`);
+          await robotBle!.joinWifi(ssid, password, new URL(result.endpoint).hostname);
+          await connectData(result.endpoint);
+        } else setNotice(zh ? '热点已配置，可点击“一键连接热点”。' : 'Hotspot configured. Tap Connect hotspot.');
       }
     } catch (e) { setNotice((e as Error).message); }
-    finally { setPending(false); }
+    finally { setPending(false); setStage(''); }
   };
   const apply = () => Alert.alert(zh ? '切换狗子网络' : 'Switch robot network',
-    zh ? '切换会断开狗子当前 Wi-Fi 连接。请先结束遥控与任务；蓝牙连接可用于继续配网。' : 'This disconnects the current robot Wi-Fi. Finish controls and tasks first; BLE remains available for provisioning.', [
+    zh ? '将关闭狗子热点，连接所选 Wi-Fi。请先结束遥控与任务；手机随后会提示连接同一 Wi-Fi。' : 'The robot hotspot will close and join the selected Wi-Fi. Finish controls and tasks first; confirm joining the same Wi-Fi on your phone.', [
       { text: zh ? '取消' : 'Cancel', style: 'cancel' },
       { text: zh ? '应用' : 'Apply', onPress: () => void request(mode) },
     ]);
@@ -93,34 +100,37 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
     finally { setStage(''); setPending(false); }
   };
   const inputStyle = { borderWidth: 1, borderColor: theme.colors.borderDefault, borderRadius: 10,
-    padding: 12, color: theme.colors.textPrimary, backgroundColor: theme.colors.bgInset };
+    padding: 10, fontSize: 13, color: theme.colors.textPrimary, backgroundColor: theme.colors.bgInset };
   return <>
     <SectionHeader title={zh ? '网络与传输' : 'Network & streaming'} />
-    <ProductCard>
-      <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 18 }}>{zh ? '连接狗子热点' : 'Connect robot hotspot'}</Text>
-      <Text style={{ color: theme.colors.textSecondary, marginVertical: 12 }}>{zh ? '点击连接后，在系统弹窗中确认即可。热点密码、IP 和端口自动填写；请在狗子静止且任务停止时切换网络。' : 'Confirm the system prompt; password and robot address are filled automatically. Switch networks while the robot is idle.'}</Text>
+    <View style={{ flexDirection: 'row', gap: 8 }}>
+      <ProductButton compact label={zh ? '狗子热点' : 'Robot hotspot'} variant={mode === 'hotspot' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('hotspot'); setNotice(''); }} />
+      <ProductButton compact label={zh ? '连接外部 Wi-Fi' : 'External Wi-Fi'} variant={mode === 'wifi' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('wifi'); setSsid(''); setPassword(''); setNotice(''); }} />
+    </View>
+    {mode === 'hotspot' ? <ProductCard>
+      <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 15 }}>{zh ? '手机直连狗子' : 'Connect directly to robot'}</Text>
+      <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginVertical: 10 }}>{zh ? '连接蓝牙后点击下方按钮，确认系统 Wi-Fi 弹窗即可。密码和地址自动填写。' : 'Connect Bluetooth, tap below, then confirm the system Wi-Fi prompt. Password and address are filled automatically.'}</Text>
+      {!ble && !hotspot && <BluetoothConnect navigateOnConnect={false} />}
       <ProductButton label={pending ? (stage || (zh ? '正在配置…' : 'Configuring…')) : ready ? (zh ? '重新连接热点' : 'Reconnect hotspot') : (zh ? '一键连接热点' : 'Connect hotspot')}
         icon="wifi-outline" disabled={pending || (!ble && !hotspot)} onPress={() => void quickConnect()} />
-      {!ble && !hotspot && <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>{zh ? '先返回设备页，扫描并连接狗子蓝牙。' : 'Scan and connect robot Bluetooth on the device page first.'}</Text>}
-      {!!notice && <Text selectable style={{ color: ready ? theme.colors.statusConnected : theme.colors.textSecondary, marginTop: 12 }}>{notice}</Text>}
-      {ready && connected && onConnected && <ProductButton label={zh ? '进入控制' : 'Open controls'} icon="game-controller-outline" onPress={onConnected} />}
-      {hotspot && <Text selectable style={{ color: theme.colors.textSecondary, marginTop: 12 }}>{zh ? '电脑连接同一热点：' : 'PC: join the same hotspot: '}{hotspot.ssid}{'\n'}{zh ? '热点密码：' : 'Password: '}{hotspot.password}{'\n'}{zh ? 'Foxglove 地址：' : 'Foxglove: '}{hotspot.endpoint}</Text>}
-    </ProductCard>
-    <ProductButton compact label={advanced ? (zh ? '收起其他连接方式' : 'Hide other connections') : (zh ? '外部 Wi-Fi / 手动连接' : 'External Wi-Fi / manual connection')} variant="ghost" disabled={pending} onPress={() => setAdvanced(!advanced)} />
-    {advanced && <ProductCard>
-      <Text style={{ color: theme.colors.textSecondary }}>{zh ? '蓝牙负责配网；视频、点云和遥控通过 Wi-Fi 或安全远程网络传输。' : 'Provision over BLE; use Wi-Fi or a private remote network for video, clouds and control.'}</Text>
-      <View style={{ flexDirection: 'row', gap: 8, marginVertical: 12 }}>
-        <ProductButton compact label={zh ? '狗子热点' : 'Robot hotspot'} variant={mode === 'hotspot' ? 'primary' : 'secondary'} onPress={() => { setMode('hotspot'); setSsid('dog4-0008'); setPassword(''); }} />
-        <ProductButton compact label={zh ? '外部 Wi-Fi' : 'External Wi-Fi'} variant={mode === 'wifi' ? 'primary' : 'secondary'} onPress={() => { setMode('wifi'); setSsid(''); setPassword(''); }} />
+      {hotspot && <Text selectable style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 10 }}>{zh ? '电脑连接同一热点：' : 'PC: join the same hotspot: '}{hotspot.ssid}{'\n'}{zh ? '热点密码：' : 'Password: '}{hotspot.password}{'\n'}{zh ? 'Foxglove 地址：' : 'Foxglove: '}{hotspot.endpoint}</Text>}
+    </ProductCard> : <ProductCard>
+      <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 15 }}>{zh ? '关闭热点，连接外部 Wi-Fi' : 'Close hotspot and join Wi-Fi'}</Text>
+      <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginVertical: 10 }}>{zh ? '先通过蓝牙连接狗子，再选择网络并输入密码。狗子和手机将切换到同一个 Wi-Fi，连接地址自动填写。仅在狗子静止、任务结束后操作。' : 'Connect Bluetooth, select a network and enter its password. Robot and phone join the same Wi-Fi; the address is filled automatically. Switch only while idle.'}</Text>
+      {!ble && <BluetoothConnect navigateOnConnect={false} />}
+      <View style={{ gap: 8 }}>
+        <ProductButton compact label={zh ? '扫描附近 Wi-Fi' : 'Scan nearby Wi-Fi'} variant="secondary" disabled={!ble || pending} onPress={() => void request('scan')} />
+        {networks.map(name => <ProductButton compact key={name} label={name} variant={ssid === name ? 'secondary' : 'ghost'} disabled={pending} onPress={() => setSsid(name)} />)}
+        <TextInput accessibilityLabel="Wi-Fi SSID" placeholder={zh ? 'Wi-Fi 名称' : 'Wi-Fi name'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={ssid} onChangeText={setSsid} editable={!pending} autoCapitalize="none" />
+        <TextInput accessibilityLabel={zh ? 'Wi-Fi 密码' : 'Wi-Fi password'} placeholder={zh ? 'Wi-Fi 密码' : 'Wi-Fi password'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={password} onChangeText={setPassword} secureTextEntry editable={!pending} autoCapitalize="none" />
+        <ProductButton label={pending ? (stage || (zh ? '正在切换…' : 'Switching…')) : (zh ? '关闭热点并连接此 Wi-Fi' : 'Close hotspot and connect')} icon="wifi-outline" disabled={!ble || pending || !ssid || password.length < 8} onPress={apply} />
       </View>
+    </ProductCard>}
+    {!!notice && <Text selectable style={{ color: ready ? theme.colors.statusConnected : theme.colors.textSecondary, fontSize: 13 }}>{notice}</Text>}
+    {ready && connected && onConnected && <ProductButton label={zh ? '进入控制' : 'Open controls'} icon="game-controller-outline" onPress={onConnected} />}
+    <ProductButton compact label={advanced ? (zh ? '收起手动连接' : 'Hide manual connection') : (zh ? '手动连接 / 远程网络' : 'Manual / remote connection')} variant="ghost" disabled={pending} onPress={() => setAdvanced(!advanced)} />
+    {advanced && <ProductCard>
       <View style={{ gap: 10 }}>
-        <TextInput accessibilityLabel="Wi-Fi SSID" placeholder="Wi-Fi SSID" placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={ssid} onChangeText={setSsid} editable={!pending} autoCapitalize="none" />
-        <TextInput accessibilityLabel={zh ? 'Wi-Fi 密码' : 'Wi-Fi password'} placeholder={zh ? 'Wi-Fi 密码（热点至少 8 位）' : 'Wi-Fi password (hotspot: at least 8 characters)'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={password} onChangeText={setPassword} secureTextEntry editable={!pending} autoCapitalize="none" />
-        {mode === 'wifi' && <ProductButton compact label={zh ? '扫描狗子附近 Wi-Fi' : 'Scan nearby Wi-Fi'} variant="secondary" disabled={!ble || pending} onPress={() => void request('scan')} />}
-        {mode === 'wifi' && networks.map(name => <ProductButton compact key={name} label={name} variant="ghost" onPress={() => setSsid(name)} />)}
-        <ProductButton label={pending ? (zh ? '正在配置…' : 'Configuring…') : (zh ? '通过蓝牙应用配置' : 'Apply over Bluetooth')} icon="wifi-outline" disabled={!ble || pending || !ssid || (mode === 'hotspot' && password.length < 8)} onPress={apply} />
-        {!ble && <Text style={{ color: theme.colors.textMuted }}>{zh ? '请先在上方扫描并连接狗子蓝牙。' : 'Scan and connect robot Bluetooth above first.'}</Text>}
-        {!!notice && <Text selectable style={{ color: theme.colors.textSecondary }}>{notice}</Text>}
         {snapshot && <Text style={{ color: theme.colors.textSecondary }}>{snapshot.connection} · {snapshot.addresses?.wlan0?.join(', ') || '—'}</Text>}
         <ProductButton compact label={zh ? '打开手机 Wi-Fi 设置' : 'Open phone Wi-Fi settings'} variant="secondary" onPress={() => void (Platform.OS === 'android' ? Linking.sendIntent('android.settings.WIFI_SETTINGS') : Linking.openSettings()).catch(e => setNotice(String(e)))} />
         <Text style={{ color: theme.colors.textSecondary }}>{zh ? 'Wi-Fi / 远程 VPN 地址' : 'Wi-Fi / remote VPN address'}</Text>

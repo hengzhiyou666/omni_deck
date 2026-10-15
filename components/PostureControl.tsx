@@ -78,7 +78,7 @@ function PostureButton({ cockpit, compact, disabled, waiting, icon, label, onPre
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[styles.button, compact && styles.compactButton, cockpit && { backgroundColor: theme.colors.bgSurface, borderRadius: 10 }, disabled && styles.disabled]}
+      style={[styles.button, compact && styles.compactButton, cockpit && { minHeight: 40, paddingHorizontal: 10, backgroundColor: theme.colors.bgSurface, borderRadius: 10 }, disabled && styles.disabled]}
       disabled={disabled}
       onPress={onPress}
       activeOpacity={0.75}
@@ -88,7 +88,7 @@ function PostureButton({ cockpit, compact, disabled, waiting, icon, label, onPre
         size={compact ? 20 : 16}
         color={disabled ? theme.colors.textMuted : theme.colors.statusConnected}
       />
-      {!compact && <Text style={styles.text}>{label}</Text>}
+      {!compact && <Text style={[styles.text, cockpit && { fontSize: 11 }]}>{label}</Text>}
     </TouchableOpacity>
   );
 }

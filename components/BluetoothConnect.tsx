@@ -8,7 +8,7 @@ import { robotBle, requestBlePermission } from '../modules/expo-robot-ble/src';
 import { useRosStore } from '../stores/useRosStore';
 import { theme } from '../constants/theme';
 
-export function BluetoothConnect() {
+export function BluetoothConnect({ navigateOnConnect = true }: { navigateOnConnect?: boolean }) {
   const theme = useAppTheme();
   const zh = useSettingsStore(s => s.language) === 'zh';
   const router = useRouter();
@@ -39,8 +39,9 @@ export function BluetoothConnect() {
       useRosStore.getState().setTransportType('ble');
       await useRosStore.getState().connectToUrl(`ble://${id}`);
       const { connection } = useRosStore.getState();
-      if (connection.status === 'connected') router.push('/(tabs)/device');
-      else setError(connection.error ?? 'Bluetooth connection failed');
+      if (connection.status === 'connected') {
+        if (navigateOnConnect) router.push('/(tabs)/device');
+      } else setError(connection.error ?? 'Bluetooth connection failed');
     } finally { setConnecting(false); }
   };
   return <View style={{ gap: 10 }}>

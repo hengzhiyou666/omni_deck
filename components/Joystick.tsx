@@ -2,7 +2,7 @@ import { useThemeStyles } from '../hooks/useAppTheme';
 import type { AppTheme } from '../constants/theme';
 import * as Haptics from '../lib/haptics';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, Vibration, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -41,11 +41,24 @@ export function calculateVelocity(
 ): { nx: number; ny: number } {
   const distance = Math.sqrt(dx * dx + dy * dy);
   if (distance === 0 || radius <= 0) return { nx: 0, ny: 0 };
-  const clampedDist = Math.min(distance, radius);
-  const angle = Math.atan2(dy, dx);
+  const magnitude = Math.min(distance, radius) / radius;
+  // Include the 45-degree boundaries in forward/backward; never command diagonals.
+  return Math.abs(dy) >= Math.abs(dx)
+    ? { nx: 0, ny: -Math.sign(dy) * magnitude }
+    : { nx: -Math.sign(dx) * magnitude, ny: 0 };
+}
+
+/** Trim compensates drift only while driving forward/backward, never at rest. */
+export function calculateManualVelocity(
+  sideways: number, forward: number, yaw: number,
+  maxForward: number, maxLateral: number, maxYaw: number,
+  lateralTrim: number, yawTrim: number,
+) {
+  const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
   return {
-    nx: -(clampedDist * Math.cos(angle)) / radius,
-    ny: -(clampedDist * Math.sin(angle)) / radius,
+    linearX: forward * maxForward,
+    linearY: clamp(sideways * maxLateral + lateralTrim * Math.abs(forward), maxLateral),
+    angularZ: clamp(yaw * maxYaw + yawTrim * Math.abs(forward), maxYaw),
   };
 }
 
@@ -67,6 +80,7 @@ interface PadProps {
   onChange: (x: number, y: number) => void;
   onEnd: () => void;
   overlay?: boolean;
+  trim?: React.ReactNode;
 }
 
 function JoystickPad({
@@ -81,6 +95,7 @@ function JoystickPad({
   onChange,
   onEnd,
   overlay = false,
+  trim,
 }: PadProps) {
   const { theme, styles } = useThemeStyles(createStyles);
   const translateX = useSharedValue(0);
@@ -144,11 +159,9 @@ function JoystickPad({
           return;
         }
 
-        const clampedDistance = Math.min(distance, currentRadius);
-        const angle = Math.atan2(dy, dx);
-        translateX.value = clampedDistance * Math.cos(angle);
-        translateY.value = clampedDistance * Math.sin(angle);
         const value = calculateVelocity(dx, dy, currentRadius);
+        translateX.value = -value.nx * currentRadius;
+        translateY.value = -value.ny * currentRadius;
         onChangeRef.current(value.nx, value.ny);
       },
       onTouchEnd: () => {
@@ -199,7 +212,8 @@ function JoystickPad({
     <View pointerEvents="box-none" style={[styles.padColumn, { width: size + 12 }]}>
       <View style={overlay ? styles.overlayPadCaption : undefined}>
         <Text style={[styles.padLabel, overlay && styles.overlayPadLabel]}>{label}</Text>
-        <Text style={[styles.padHint, overlay && styles.overlayPadHint]}>{hint}</Text>
+        {!overlay && <Text style={styles.padHint}>{hint}</Text>}
+        {trim}
       </View>
       <View
         ref={baseRef}
@@ -254,10 +268,13 @@ export function Joystick(props?: Partial<WidgetProps>) {
     cmdVelTopic,
     props?.config?.requireLocoMode,
   ).requireLocomotionMode;
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const setAxes = useCmdVelStore((state) => state.setAxes);
   const gamepadConnected = useGamepadStore((state) => state.connected);
   const [display, setDisplay] = useState({ linearX: 0, linearY: 0, angularZ: 0 });
+  const input = useRef({ sideways: 0, forward: 0, yaw: 0 });
+  const [trim, setTrim] = useState({ lateral: 0, yaw: 0 });
+  const trimRef = useRef(trim);
   const displayRef = useRef(display);
   const displayRaf = useRef(false);
 
@@ -279,32 +296,62 @@ export function Joystick(props?: Partial<WidgetProps>) {
     });
   }, []);
 
+  const applyInput = useCallback(() => {
+    const { sideways, forward, yaw } = input.current;
+    const next = calculateManualVelocity(sideways, forward, yaw,
+      maxForwardVel, maxLinearVel, maxAngularVel, trimRef.current.lateral, trimRef.current.yaw);
+    setAxes(cmdVelTopic, { 'linear.x': next.linearX, 'linear.y': next.linearY, 'angular.z': next.angularZ });
+    updateDisplay(next);
+  }, [cmdVelTopic, maxLinearVel, maxForwardVel, maxAngularVel, setAxes, updateDisplay]);
+
   const updateTranslation = useCallback((sideways: number, forward: number) => {
-    const linearX = forward * maxForwardVel;
-    const linearY = sideways * maxLinearVel;
-    setAxes(cmdVelTopic, { 'linear.x': linearX, 'linear.y': linearY });
-    updateDisplay({ linearX, linearY });
-  }, [cmdVelTopic, maxLinearVel, maxForwardVel, setAxes, updateDisplay]);
+    input.current = { ...input.current, sideways, forward };
+    applyInput();
+  }, [applyInput]);
 
   const updateYaw = useCallback((yaw: number) => {
-    const angularZ = yaw * maxAngularVel;
-    setAxes(cmdVelTopic, { 'angular.z': angularZ });
-    updateDisplay({ angularZ });
-  }, [cmdVelTopic, maxAngularVel, setAxes, updateDisplay]);
+    input.current.yaw = yaw;
+    applyInput();
+  }, [applyInput]);
 
   const stopTranslation = useCallback(() => {
-    setAxes(cmdVelTopic, { 'linear.x': 0, 'linear.y': 0 });
-    displayRef.current = { ...displayRef.current, linearX: 0, linearY: 0 };
-    setDisplay({ ...displayRef.current });
+    input.current = { ...input.current, sideways: 0, forward: 0 };
+    applyInput();
     publishNow();
-  }, [cmdVelTopic, publishNow, setAxes]);
+  }, [applyInput, publishNow]);
 
   const stopYaw = useCallback(() => {
-    setAxes(cmdVelTopic, { 'angular.z': 0 });
-    displayRef.current = { ...displayRef.current, angularZ: 0 };
-    setDisplay({ ...displayRef.current });
+    input.current.yaw = 0;
+    applyInput();
     publishNow();
-  }, [cmdVelTopic, publishNow, setAxes]);
+  }, [applyInput, publishNow]);
+
+  useEffect(() => {
+    if (controlBlocked || gamepadConnected) input.current = { sideways: 0, forward: 0, yaw: 0 };
+  }, [controlBlocked, gamepadConnected]);
+
+  const zh = language === 'zh';
+  const changeTrim = (axis: 'lateral' | 'yaw', direction: number) => {
+    const step = axis === 'lateral' ? 0.01 : 0.02;
+    const limit = axis === 'lateral' ? 0.10 : 0.20;
+    const value = direction === 0 ? 0 : Math.round(Math.max(-limit, Math.min(limit,
+      trimRef.current[axis] + direction * step)) * 100) / 100;
+    trimRef.current = { ...trimRef.current, [axis]: value };
+    setTrim(trimRef.current);
+    if (!gamepadConnected) applyInput();
+  };
+  const trimControl = (axis: 'lateral' | 'yaw') => (
+    <View style={styles.trimRow}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={zh ? '向左微调' : 'Trim left'} disabled={gamepadConnected}
+        style={styles.trimButton} onPress={() => changeTrim(axis, 1)}><Text style={styles.trimArrow}>←</Text></TouchableOpacity>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={zh ? '微调归零' : 'Reset trim'} disabled={gamepadConnected}
+        style={styles.trimValueButton} onPress={() => changeTrim(axis, 0)}>
+        <Text style={styles.trimValue}>{zh ? '微调' : 'Trim'} {trim[axis] > 0 ? '+' : ''}{trim[axis].toFixed(2)} {axis === 'lateral' ? 'm/s' : 'rad/s'}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={zh ? '向右微调' : 'Trim right'} disabled={gamepadConnected}
+        style={styles.trimButton} onPress={() => changeTrim(axis, -1)}><Text style={styles.trimArrow}>→</Text></TouchableOpacity>
+    </View>
+  );
 
   useEffect(() => () => {
     setAxes(cmdVelTopic, { 'linear.x': 0, 'linear.y': 0, 'angular.z': 0 });
@@ -349,6 +396,7 @@ export function Joystick(props?: Partial<WidgetProps>) {
           onChange={updateTranslation}
           onEnd={stopTranslation}
           overlay={overlayMode}
+          trim={trimControl('lateral')}
         />
         <JoystickPad
           kind="yaw"
@@ -362,6 +410,7 @@ export function Joystick(props?: Partial<WidgetProps>) {
           onChange={(yaw) => updateYaw(yaw)}
           onEnd={stopYaw}
           overlay={overlayMode}
+          trim={trimControl('yaw')}
         />
       </View>
 
@@ -410,6 +459,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6 },
   padsRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', gap: 10 },
   padColumn: { alignItems: 'center' },
+  trimRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  trimButton: { minWidth: 36, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
+  trimValueButton: { minHeight: 32, justifyContent: 'center', alignItems: 'center' },
+  trimArrow: { color: theme.colors.accentPrimary, fontSize: 18, fontWeight: '700' },
+  trimValue: { color: theme.colors.textSecondary, fontSize: 8 },
   padLabel: { color: theme.colors.textPrimary, fontSize: 12, fontWeight: '700', letterSpacing: 0.4 },
   padHint: { color: theme.colors.textMuted, fontSize: 9, marginTop: 1, marginBottom: 6 },
   base: { backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle, alignItems: 'center', justifyContent: 'center' },

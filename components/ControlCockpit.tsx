@@ -71,6 +71,8 @@ import { EmergencyStop } from './EmergencyStop';
 import { CockpitTelemetry } from './CockpitTelemetry';
 import { InspectionProgress } from './InspectionProgress';
 import { RecordingControl } from './RecordingControl';
+import { MappingControl } from './MappingControl';
+import { RouteRecordingControl } from './RouteRecordingControl';
 import { ControlAuthorityButton } from './ControlAuthority';
 import { PostureControl } from './PostureControl';
 import { Joystick } from './Joystick';
@@ -848,6 +850,10 @@ export function ControlCockpit({
       </View>
       <View pointerEvents="box-none" style={[styles.controlDock, { bottom: Math.max(12, insets.bottom + 8) }, pendingMapGoal && scene === 'map' && !navigationActive ? { display: 'none' } : null]}>
         <View style={styles.dockRow}>
+          <MappingControl cockpit />
+          <RouteRecordingControl cockpit />
+        </View>
+        <View style={styles.dockRow}>
           <ControlAuthorityButton cockpit />
           <PostureControl cockpit />
         </View>
@@ -1100,14 +1106,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   reticleV: { position: 'absolute', width: 1, height: 12, backgroundColor: '#FFFFFF60', top: 15, left: 20 },
   telemetryDock: { position: 'absolute', top: 61, maxWidth: '57%' },
   navigationFeedback: { color: theme.colors.textPrimary, fontSize: 10, textAlign: 'center' },
-  controlDock: { position: 'absolute', left: '25%', right: '25%', padding: 10, borderRadius: 14, gap: 8, backgroundColor: theme.colors.bgElevated + 'F2', borderWidth: 1, borderColor: theme.colors.borderDefault },
+  controlDock: { position: 'absolute', left: '25%', right: '25%', padding: 8, borderRadius: 14, gap: 5, backgroundColor: theme.colors.bgElevated + 'F2', borderWidth: 1, borderColor: theme.colors.borderDefault },
   dockRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   topBar: { position: 'absolute', top: 0, left: 0, right: 0, minHeight: 66, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, paddingBottom: 8 },
   topGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cockpitButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.bgElevated + 'EB' },
+  cockpitButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 8, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.bgElevated + 'EB' },
   cockpitButtonActive: { borderColor: theme.colors.accentPrimary + 'AA', backgroundColor: theme.colors.accentPrimaryMuted },
   cockpitButtonDanger: { borderColor: theme.colors.statusError + '99', backgroundColor: theme.colors.statusErrorGlow },
-  cockpitButtonText: { color: theme.colors.textPrimary, fontSize: 12, fontWeight: '700' },
+  cockpitButtonText: { color: theme.colors.textPrimary, fontSize: 10, fontWeight: '700' },
   cockpitButtonDangerText: { color: theme.colors.statusError },
   connectionPill: { maxWidth: 230, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, borderRadius: 13, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.bgElevated + 'EB' },
   connectionDot: { width: 8, height: 8, borderRadius: 4 },
