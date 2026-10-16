@@ -22,6 +22,7 @@ import { robotBle } from '../../modules/expo-robot-ble/src';
 import { waitForRobotControl } from '../../lib/robot-hotspot';
 import { useRosStore } from '../../stores/useRosStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
+import { usePairingStore } from '../../stores/usePairingStore';
 import type { Transport } from '../../lib/transport';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -60,4 +61,64 @@ it('switches hotspot to external Wi-Fi over BLE, then joins the phone and verifi
     useRosStore.setState(original);
     request.mockRestore();
   }
+});
+
+describe('remote gateway connection', () => {
+  const originalRos = useRosStore.getState();
+  const originalPairing = usePairingStore.getState();
+  let tree: any;
+  let connect: jest.Mock;
+  const data = { subscribe: () => ({ unsubscribe() {} }) } as unknown as Transport;
+  const button = (label: string) => tree.root.findAll((n: any) => n.type === 'ProductButton' && n.props.label === label)[0];
+  const fill = async (endpoint: string, token = 'test-token') => {
+    await act(async () => {
+      tree.root.findByProps({ accessibilityLabel: 'Remote endpoint' }).props.onChangeText(endpoint);
+      tree.root.findByProps({ accessibilityLabel: 'Remote access token' }).props.onChangeText(token);
+    });
+  };
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    usePairingStore.setState({ pairing: null, loaded: true });
+    useSettingsStore.setState({ language: 'zh' });
+    connect = jest.fn(async (url: string) => {
+      expect(usePairingStore.getState().pairing).toEqual({ host: 'robot.example.com', user: 'operator', token: 'test-token' });
+      useRosStore.setState({ transport: data, connection: { url, status: 'connected', ros: null, error: null } });
+    });
+    useRosStore.setState({ transport: null, savedConnections: [], connectToUrl: connect,
+      connection: { url: '', status: 'disconnected', ros: null, error: null } });
+    await act(async () => { tree = create(<NetworkSettings onConnected={() => {}} />); });
+    await act(async () => { button('公网连接').props.onPress(); });
+  });
+  afterEach(async () => {
+    await act(async () => { tree.unmount(); });
+    useRosStore.setState(originalRos);
+    usePairingStore.setState(originalPairing);
+  });
+  it('saves credentials before connecting and confirms real robot status without joining Wi-Fi', async () => {
+    await fill('wss://robot.example.com:443/dog4');
+    await act(async () => { button('连接公网服务').props.onPress(); });
+    expect(connect).toHaveBeenCalledWith('wss://robot.example.com:443/dog4');
+    expect(waitForRobotControl).toHaveBeenCalledWith(data);
+    expect(robotBle!.joinWifi).not.toHaveBeenCalled();
+    expect(button('进入控制')).toBeDefined();
+  });
+  it.each(['ws://robot.example.com', 'https://robot.example.com', 'robot.example.com'])('rejects %s before sending credentials', async (endpoint) => {
+    await fill(endpoint);
+    await act(async () => { button('连接公网服务').props.onPress(); });
+    expect(connect).not.toHaveBeenCalled();
+    expect(usePairingStore.getState().pairing).toBeNull();
+    expect(button('进入控制')).toBeUndefined();
+  });
+  it('rejects missing credentials', async () => {
+    await fill('wss://robot.example.com', '');
+    await act(async () => { button('连接公网服务').props.onPress(); });
+    expect(connect).not.toHaveBeenCalled();
+  });
+  it('does not show robot ready when the gateway has no robot telemetry', async () => {
+    (waitForRobotControl as jest.Mock).mockRejectedValueOnce(new Error('Robot offline'));
+    await fill('wss://robot.example.com');
+    await act(async () => { button('连接公网服务').props.onPress(); });
+    expect(button('进入控制')).toBeUndefined();
+    expect(JSON.stringify(tree.toJSON())).toContain('Robot offline');
+  });
 });

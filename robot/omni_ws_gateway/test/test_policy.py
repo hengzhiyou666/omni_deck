@@ -67,6 +67,9 @@ class Defaults(unittest.TestCase):
             "/omni/mission/runtime/set_mode").allowed)
         for service in (
             "/omni/maps/list",
+            "/omni/control/set_travel_speed",
+            "/omni/recording/start",
+            "/omni/recording/stop",
             "/omni/routes/checkpoints/get",
             "/omni/routes/checkpoints/update",
             "/omni/mission/results",

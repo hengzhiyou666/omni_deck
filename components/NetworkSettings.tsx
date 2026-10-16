@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Linking, Platform, Switch, Text, TextInput, View } from 'react-native';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { BleTransport } from '../lib/ble-transport';
+import { parseConnectionInput, formatConnectionUrl } from '../lib/connection-url';
 import { robotBle, requestWifiPermission } from '../modules/expo-robot-ble/src';
 import { parseHotspotConnection, waitForRobotControl } from '../lib/robot-hotspot';
 import { useRosStore } from '../stores/useRosStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
+import { usePairingStore } from '../stores/usePairingStore';
 import { ProductButton, ProductCard, SectionHeader } from './ProductUI';
 import { TrafficPanel } from './TrafficPanel';
 import { BluetoothConnect } from './BluetoothConnect';
@@ -19,7 +21,12 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
   const [stage, setStage] = useState('');
   const [ready, setReady] = useState(false);
   const [hotspot, setHotspot] = useState<{ ssid: string; password: string; endpoint: string } | null>(null);
-  const [mode, setMode] = useState<'hotspot' | 'wifi'>('hotspot');
+  const [mode, setMode] = useState<'hotspot' | 'wifi' | 'remote'>('hotspot');
+  const pairing = usePairingStore(s => s.pairing);
+  const [remoteEndpoint, setRemoteEndpoint] = useState(() =>
+    useRosStore.getState().savedConnections.find(c => c.url.startsWith('wss://'))?.url || '');
+  const [remoteUser, setRemoteUser] = useState(pairing?.user || 'operator');
+  const [remoteToken, setRemoteToken] = useState(pairing?.token || '');
   const [ssid, setSsid] = useState('dog4-0008');
   const [password, setPassword] = useState('');
   const [networks, setNetworks] = useState<string[]>([]);
@@ -99,13 +106,28 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
     } catch (error) { setNotice((error as Error).message); }
     finally { setStage(''); setPending(false); }
   };
+  const connectRemote = async () => {
+    if (pending) return;
+    setPending(true); setReady(false); setNotice('');
+    try {
+      const parsed = parseConnectionInput(remoteEndpoint);
+      if (parsed.kind !== 'valid' || parsed.scheme !== 'wss')
+        throw new Error(zh ? '请输入 wss:// 开头的公网连接地址。' : 'Enter a public address starting with wss://.');
+      if (!remoteUser.trim() || !remoteToken.trim())
+        throw new Error(zh ? '请填写公网网关的用户名和访问令牌。' : 'Enter the gateway username and access token.');
+      usePairingStore.getState().save({ host: parsed.host, user: remoteUser.trim(), token: remoteToken.trim() });
+      await connectData(formatConnectionUrl(parsed, 443));
+    } catch (error) { setNotice((error as Error).message); }
+    finally { setPending(false); setStage(''); }
+  };
   const inputStyle = { borderWidth: 1, borderColor: theme.colors.borderDefault, borderRadius: 10,
     padding: 10, fontSize: 13, color: theme.colors.textPrimary, backgroundColor: theme.colors.bgInset };
   return <>
     <SectionHeader title={zh ? '网络与传输' : 'Network & streaming'} />
-    <View style={{ flexDirection: 'row', gap: 8 }}>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
       <ProductButton compact label={zh ? '狗子热点' : 'Robot hotspot'} variant={mode === 'hotspot' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('hotspot'); setNotice(''); }} />
       <ProductButton compact label={zh ? '连接外部 Wi-Fi' : 'External Wi-Fi'} variant={mode === 'wifi' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('wifi'); setSsid(''); setPassword(''); setNotice(''); }} />
+      <ProductButton compact label={zh ? '公网连接' : 'Remote access'} variant={mode === 'remote' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('remote'); setReady(false); setNotice(''); }} />
     </View>
     {mode === 'hotspot' ? <ProductCard>
       <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 15 }}>{zh ? '手机直连狗子' : 'Connect directly to robot'}</Text>
@@ -114,7 +136,7 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
       <ProductButton label={pending ? (stage || (zh ? '正在配置…' : 'Configuring…')) : ready ? (zh ? '重新连接热点' : 'Reconnect hotspot') : (zh ? '一键连接热点' : 'Connect hotspot')}
         icon="wifi-outline" disabled={pending || (!ble && !hotspot)} onPress={() => void quickConnect()} />
       {hotspot && <Text selectable style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 10 }}>{zh ? '电脑连接同一热点：' : 'PC: join the same hotspot: '}{hotspot.ssid}{'\n'}{zh ? '热点密码：' : 'Password: '}{hotspot.password}{'\n'}{zh ? 'Foxglove 地址：' : 'Foxglove: '}{hotspot.endpoint}</Text>}
-    </ProductCard> : <ProductCard>
+    </ProductCard> : mode === 'wifi' ? <ProductCard>
       <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 15 }}>{zh ? '关闭热点，连接外部 Wi-Fi' : 'Close hotspot and join Wi-Fi'}</Text>
       <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginVertical: 10 }}>{zh ? '先通过蓝牙连接狗子，再选择网络并输入密码。狗子和手机将切换到同一个 Wi-Fi，连接地址自动填写。仅在狗子静止、任务结束后操作。' : 'Connect Bluetooth, select a network and enter its password. Robot and phone join the same Wi-Fi; the address is filled automatically. Switch only while idle.'}</Text>
       {!ble && <BluetoothConnect navigateOnConnect={false} />}
@@ -125,10 +147,19 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
         <TextInput accessibilityLabel={zh ? 'Wi-Fi 密码' : 'Wi-Fi password'} placeholder={zh ? 'Wi-Fi 密码' : 'Wi-Fi password'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={password} onChangeText={setPassword} secureTextEntry editable={!pending} autoCapitalize="none" />
         <ProductButton label={pending ? (stage || (zh ? '正在切换…' : 'Switching…')) : (zh ? '关闭热点并连接此 Wi-Fi' : 'Close hotspot and connect')} icon="wifi-outline" disabled={!ble || pending || !ssid || password.length < 8} onPress={apply} />
       </View>
+    </ProductCard> : <ProductCard>
+      <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 15 }}>{zh ? '通过互联网连接狗子' : 'Connect to robot over the internet'}</Text>
+      <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginVertical: 10 }}>{zh ? '无需连接狗子热点或蓝牙。狗子需已接入公网网关，手机可使用移动网络或 Wi-Fi；首次填写部署时提供的连接信息。' : 'No robot hotspot or Bluetooth required. The robot must already be connected to a public gateway. Use mobile data or Wi-Fi and enter the supplied connection details once.'}</Text>
+      <View style={{ gap: 8 }}>
+        <TextInput accessibilityLabel="Remote endpoint" placeholder="wss://robot.example.com" placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={remoteEndpoint} onChangeText={setRemoteEndpoint} editable={!pending} autoCapitalize="none" autoCorrect={false} />
+        <TextInput accessibilityLabel="Remote username" placeholder={zh ? '网关用户名' : 'Gateway username'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={remoteUser} onChangeText={setRemoteUser} editable={!pending} autoCapitalize="none" autoCorrect={false} />
+        <TextInput accessibilityLabel="Remote access token" placeholder={zh ? '访问令牌' : 'Access token'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={remoteToken} onChangeText={setRemoteToken} editable={!pending} secureTextEntry autoCapitalize="none" autoCorrect={false} />
+        <ProductButton label={pending ? (stage || (zh ? '正在连接…' : 'Connecting…')) : (zh ? '连接公网服务' : 'Connect remote gateway')} icon="globe-outline" disabled={pending} onPress={() => void connectRemote()} />
+      </View>
     </ProductCard>}
     {!!notice && <Text selectable style={{ color: ready ? theme.colors.statusConnected : theme.colors.textSecondary, fontSize: 13 }}>{notice}</Text>}
     {ready && connected && onConnected && <ProductButton label={zh ? '进入控制' : 'Open controls'} icon="game-controller-outline" onPress={onConnected} />}
-    <ProductButton compact label={advanced ? (zh ? '收起手动连接' : 'Hide manual connection') : (zh ? '手动连接 / 远程网络' : 'Manual / remote connection')} variant="ghost" disabled={pending} onPress={() => setAdvanced(!advanced)} />
+    <ProductButton compact label={advanced ? (zh ? '收起手动连接' : 'Hide manual connection') : (zh ? '手动连接 / VPN' : 'Manual connection / VPN')} variant="ghost" disabled={pending} onPress={() => setAdvanced(!advanced)} />
     {advanced && <ProductCard>
       <View style={{ gap: 10 }}>
         {snapshot && <Text style={{ color: theme.colors.textSecondary }}>{snapshot.connection} · {snapshot.addresses?.wlan0?.join(', ') || '—'}</Text>}
@@ -141,7 +172,7 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
           catch (error) { setNotice((error as Error).message); }
           finally { setPending(false); setStage(''); }
         }} />
-        <Text style={{ color: theme.colors.textMuted }}>{zh ? 'SIM 远程连接需手机、电脑和狗子加入同一 VPN。此处填写狗子的 VPN 地址:8765；SIM 套餐余量以运营商为准。' : 'For cellular access, join the same VPN on phone, PC and robot. Enter robot VPN address:8765. Carrier quota is provided by your operator.'}</Text>
+        <Text style={{ color: theme.colors.textMuted }}>{zh ? '此处用于局域网或已配置的 VPN 地址；通过公网网关连接请使用上方“公网连接”。SIM 套餐余量以运营商为准。' : 'Use a LAN or configured VPN address here. For a public gateway, select Remote access above. Carrier quota is provided by your operator.'}</Text>
       </View>
     </ProductCard>}
     <TransmissionSettings />
