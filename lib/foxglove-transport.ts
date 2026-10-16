@@ -1,3 +1,5 @@
+import { mediaSubscription } from './media-subscription';
+import { countPayload, sendPayload } from './network-traffic';
 import type { Transport, ConnectOptions, Subscription, TopicInfo, TransportStatus } from './transport';
 import { MessageReader, MessageWriter } from '@foxglove/rosmsg2-serialization';
 import { parse as parseMessageDefinition } from '@foxglove/rosmsg';
@@ -142,7 +144,7 @@ export class FoxgloveTransport implements Transport {
           // "token"} as the very first data frame. Send it before reporting
           // the socket as connected so a failed send still rejects connect().
           try {
-            socket.send(JSON.stringify({
+            sendPayload(socket, JSON.stringify({
               op: 'login',
               user: options.login.user,
               token: options.login.token,
@@ -184,6 +186,7 @@ export class FoxgloveTransport implements Transport {
       };
 
       socket.onmessage = (event) => {
+        countPayload('rx', event.data);
         if (typeof event.data === 'string') {
           if (event.data.startsWith('{') || event.data.startsWith('[')) {
             try { this.handleMessage(JSON.parse(event.data)); } catch {}
@@ -504,7 +507,7 @@ export class FoxgloveTransport implements Transport {
     for (const pending of this.pendingSubscriptions) {
       const channelId = this.topicToChannelId.get(pending.topic);
       if (channelId !== undefined && this.ws) {
-        this.ws.send(JSON.stringify({
+        sendPayload(this.ws, JSON.stringify({
           op: 'subscribe',
           subscriptions: [{ id: pending.subId, channelId }],
         }));
@@ -613,7 +616,7 @@ export class FoxgloveTransport implements Transport {
         responseSchema,
       });
       try {
-        socket.send(payload);
+        sendPayload(socket, payload);
       } catch (error: any) {
         clearTimeout(timeout);
         this.pendingServiceCalls.delete(callId);
@@ -623,6 +626,9 @@ export class FoxgloveTransport implements Transport {
   }
 
   subscribe(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
+    return mediaSubscription(messageType, () => this.subscribeActual(topic, messageType, callback, throttleRate));
+  }
+  private subscribeActual(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
     const subId = this.nextSubId++;
     const normalizedThrottleRate = typeof throttleRate === 'number'
       && Number.isFinite(throttleRate)
@@ -642,7 +648,7 @@ export class FoxgloveTransport implements Transport {
       this.bridgeSubToTopic.set(subId, topic);
       const channelId = this.topicToChannelId.get(topic);
       if (channelId !== undefined && this.ws) {
-        this.ws.send(JSON.stringify({
+        sendPayload(this.ws, JSON.stringify({
           op: 'subscribe',
           subscriptions: [{ id: subId, channelId }],
         }));
@@ -668,7 +674,7 @@ export class FoxgloveTransport implements Transport {
             this.bridgeSubToTopic.delete(bridgeSubId);
             const ch = this.topicToChannelId.get(topic);
             if (ch !== undefined && this.ws) {
-              this.ws.send(JSON.stringify({
+              sendPayload(this.ws, JSON.stringify({
                 op: 'unsubscribe',
                 subscriptionIds: [bridgeSubId],
               }));
@@ -687,7 +693,7 @@ export class FoxgloveTransport implements Transport {
     // Foxglove protocol binds a schema to each advertised channel, so the old
     // channel must be withdrawn before publishing the new message shape.
     if (existing && this.ws) {
-      this.ws.send(JSON.stringify({
+      sendPayload(this.ws, JSON.stringify({
         op: 'unadvertise',
         channelIds: [existing.id],
       }));
@@ -697,7 +703,7 @@ export class FoxgloveTransport implements Transport {
     this.clientChannels.set(topic, { id: channelId, messageType });
 
     if (this.ws) {
-      this.ws.send(JSON.stringify({
+      sendPayload(this.ws, JSON.stringify({
         op: 'advertise',
         channels: [{
           id: channelId,
@@ -722,7 +728,7 @@ export class FoxgloveTransport implements Transport {
     view.setUint32(1, channelId, true);
     new Uint8Array(buffer, 5).set(jsonBytes);
 
-    this.ws.send(buffer);
+    sendPayload(this.ws, buffer);
   }
 
   async getTopics(): Promise<TopicInfo[]> {

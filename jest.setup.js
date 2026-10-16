@@ -16,3 +16,10 @@ jest.mock('expo-haptics', () => ({
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 }));
+
+// Node-based tests have no Android Bluetooth runtime. Transport tests replace
+// this native boundary with their own event/acknowledgement fixture.
+jest.mock('./modules/expo-robot-ble/src', () => ({
+  robotBle: null,
+  requestBlePermission: jest.fn(async () => { throw new Error('Android APK required'); }),
+}));

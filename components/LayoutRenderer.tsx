@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import type { LayoutNode } from '../types/layout';
@@ -56,6 +58,7 @@ interface RenderNodeProps {
 }
 
 function RenderNode({ node, width, height, parentSplitId, parentDirection }: RenderNodeProps) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const editMode = useLayoutStore((s) => s.editMode);
   const { isLandscape } = useOrientation();
 
@@ -131,6 +134,7 @@ function RenderNode({ node, width, height, parentSplitId, parentDirection }: Ren
 }
 
 export function LayoutRenderer() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const layout = useLayoutStore((s) => s.getActiveLayout());
   const [size, setSize] = React.useState({ width: 0, height: 0 });
   const { isLandscape } = useOrientation();
@@ -170,7 +174,7 @@ export function LayoutRenderer() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.bgBase,

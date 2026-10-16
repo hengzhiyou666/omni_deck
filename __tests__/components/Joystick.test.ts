@@ -17,7 +17,7 @@ jest.mock('react-native-reanimated', () => ({
   withSpring: jest.fn((v: number) => v),
 }));
 
-import { calculateVelocity, calculateYawVelocity } from '../../components/Joystick';
+import { calculateVelocity, calculateYawVelocity, calculateManualVelocity } from '../../components/Joystick';
 
 describe('calculateVelocity', () => {
   const radius = 60;
@@ -52,6 +52,43 @@ describe('calculateVelocity', () => {
   it('clamps to max values when pushed beyond radius', () => {
     const { ny } = calculateVelocity(0, -radius * 2, radius);
     expect(ny).toBe(1);
+  });
+
+  it.each([-40, 0, 40])('ignores lateral finger drift (%s) inside the forward/backward sector', (dx) => {
+    expect(calculateVelocity(dx, -60, radius)).toEqual({ nx: 0, ny: 1 });
+    expect(calculateVelocity(dx, 60, radius)).toEqual({ nx: 0, ny: -1 });
+  });
+
+  it.each([-1, 1])('includes exactly 45 degrees in forward/backward (%s)', (sign) => {
+    expect(calculateVelocity(30, sign * 30, radius).nx).toBe(0);
+    expect(calculateVelocity(30, sign * 30, radius).ny).toBeCloseTo(-sign * Math.SQRT1_2);
+  });
+
+  it('commands only lateral movement beyond 45 degrees', () => {
+    expect(calculateVelocity(-60, -59, radius)).toEqual({ nx: 1, ny: 0 });
+    expect(calculateVelocity(60, 59, radius)).toEqual({ nx: -1, ny: 0 });
+  });
+});
+
+describe('manual driving trim', () => {
+  const command = (side: number, forward: number, yaw: number) =>
+    calculateManualVelocity(side, forward, yaw, 0.4, 0.4, 1.5, 0.03, -0.06);
+
+  it('scales drift compensation with forward/backward stick strength', () => {
+    expect(command(0, 1, 0)).toEqual({ linearX: 0.4, linearY: 0.03, angularZ: -0.06 });
+    expect(command(0, -0.5, 0)).toEqual({ linearX: -0.2, linearY: 0.015, angularZ: -0.03 });
+  });
+
+  it('preserves the other hand on release and removes trim when translation ends', () => {
+    expect(command(0, 1, 0.2).angularZ).toBeCloseTo(0.24);
+    expect(command(0, 1, 0).angularZ).toBeCloseTo(-0.06);
+    expect(command(0, 0, 0.2)).toEqual({ linearX: 0, linearY: 0, angularZ: expect.closeTo(0.3) });
+    expect(command(0, 0, 0)).toEqual({ linearX: 0, linearY: 0, angularZ: 0 });
+  });
+
+  it('keeps pure lateral movement unchanged and clamps combined yaw', () => {
+    expect(command(1, 0, 0)).toEqual({ linearX: 0, linearY: 0.4, angularZ: 0 });
+    expect(command(0, 1, -1).angularZ).toBe(-1.5);
   });
 });
 

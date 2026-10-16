@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { theme } from '../constants/theme';
@@ -15,6 +17,7 @@ interface Props {
 }
 
 export function ConfirmDialog({ visible, title, message, confirmLabel = 'DELETE', confirmColor = theme.colors.statusError, onConfirm, onCancel }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const language = useSettingsStore((s) => s.language);
   return (
     <Modal visible={visible} transparent animationType="fade">
@@ -37,7 +40,7 @@ export function ConfirmDialog({ visible, title, message, confirmLabel = 'DELETE'
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: '#00000088',

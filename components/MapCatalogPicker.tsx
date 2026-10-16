@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -42,6 +44,7 @@ export function MapCatalogPicker({
   onCancel,
   onSelect,
 }: MapCatalogPickerProps) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((state) => state.transport);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const [entries, setEntries] = useState<MapCatalogEntry[]>([]);
@@ -215,7 +218,7 @@ export function MapCatalogPicker({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 10, backgroundColor: '#00000099' },
   dialog: { width: 560, maxWidth: '96%', maxHeight: '94%', flexShrink: 1, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.bgElevated },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
@@ -243,6 +246,6 @@ const styles = StyleSheet.create({
   secondaryButton: { minHeight: 42, minWidth: 92, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: theme.colors.borderDefault },
   secondaryText: { color: theme.colors.textSecondary, fontWeight: '700' },
   primaryButton: { minHeight: 42, minWidth: 132, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: theme.colors.accentPrimary },
-  primaryText: { color: '#061014', fontWeight: '800' },
+  primaryText: { color: theme.colors.onAccent, fontWeight: '800' },
   disabled: { opacity: 0.45 },
 });

@@ -1,3 +1,8 @@
+import { useSettingsStore } from '../stores/useSettingsStore';
+import { TransmissionSettings } from './NetworkSettings';
+import { TrafficPanel } from './TrafficPanel';
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { TravelSpeedControl } from './TravelSpeed';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -55,6 +60,7 @@ import { useAutonomyRuntimeStore } from '../stores/useAutonomyRuntimeStore';
 import { useMissionStore } from '../stores/useMissionStore';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useRosStore } from '../stores/useRosStore';
+import { useControlAuthorityStore } from '../stores/useControlAuthorityStore';
 import { useNavigationFeed } from '../hooks/useNavigationFeed';
 import type { LayoutNode, SavedLayout, WidgetConfigField, WidgetNode } from '../types/layout';
 import { cameraWidget } from '../widgets/camera';
@@ -62,6 +68,13 @@ import { mapWidget } from '../widgets/map';
 import { pointCloud3DWidget } from '../widgets/pointcloud3d';
 import { CameraFeed } from './CameraFeed';
 import { EmergencyStop } from './EmergencyStop';
+import { CockpitTelemetry } from './CockpitTelemetry';
+import { InspectionProgress } from './InspectionProgress';
+import { RecordingControl } from './RecordingControl';
+import { MappingControl } from './MappingControl';
+import { RouteRecordingControl } from './RouteRecordingControl';
+import { ControlAuthorityButton } from './ControlAuthority';
+import { PostureControl } from './PostureControl';
 import { Joystick } from './Joystick';
 import { LayoutManager } from './LayoutManager';
 import { WidgetSettings } from './WidgetSettings';
@@ -134,26 +147,30 @@ function CockpitButton({
   label,
   active = false,
   danger = false,
+  disabled = false,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   active?: boolean;
   danger?: boolean;
+  disabled?: boolean;
   onPress: () => void;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[styles.cockpitButton, active && styles.cockpitButtonActive, danger && styles.cockpitButtonDanger]}
+      disabled={disabled}
+      style={[styles.cockpitButton, active && styles.cockpitButtonActive, danger && styles.cockpitButtonDanger, disabled && { opacity: 0.4 }]}
       activeOpacity={0.72}
       onPress={onPress}
     >
       <Ionicons
         name={icon}
-        size={21}
-        color={danger ? theme.colors.statusError : active ? '#FFFFFF' : theme.colors.textPrimary}
+        size={17}
+        color={danger ? theme.colors.statusError : active ? theme.colors.textPrimary : theme.colors.textPrimary}
       />
       <Text style={[styles.cockpitButtonText, danger && styles.cockpitButtonDangerText]} numberOfLines={1}>
         {label}
@@ -163,6 +180,7 @@ function CockpitButton({
 }
 
 function GoalNudgeButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <TouchableOpacity
       accessibilityRole="button"
@@ -210,6 +228,7 @@ export function ControlCockpit({
   onExitDemo,
   onOpenRobotActions,
 }: ControlCockpitProps) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const zh = language === 'zh';
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -221,6 +240,8 @@ export function ControlCockpit({
   const editMode = useLayoutStore((state) => state.editMode);
   const setEditMode = useLayoutStore((state) => state.setEditMode);
   const updateWidgetConfigInLayout = useLayoutStore((state) => state.updateWidgetConfigInLayout);
+  const [showCockpitSettings, setShowCockpitSettings] = useState(false);
+  const videoEnabled = useSettingsStore(s => s.videoEnabled);
   const [scene, setScene] = useState<Scene>('video');
   const [missionsOpen, setMissionsOpen] = useState(false);
   const [pendingMapGoal, setPendingMapGoal] = useState<PendingMapGoal | null>(null);
@@ -245,6 +266,9 @@ export function ControlCockpit({
   const navigationError = useNavigationStore((state) => state.lastError);
 
   const connected = status === 'connected' && Boolean(transport);
+  const authorityStatus = useControlAuthorityStore(state => state.status);
+  const controlServicePending = connected && !isDemo &&
+    ['disconnected', 'detecting', 'stale'].includes(authorityStatus);
   const missionConnected = connected && !isDemo;
   const missionState = mission?.state ?? MISSION_STATE.NONE;
   const missionActive = !missionStatusStale &&
@@ -333,6 +357,10 @@ export function ControlCockpit({
     () => ({
       ...pointCloud3DWidget.defaultConfig,
       ...(pointCloudSelection?.node.config ?? {}),
+      // Upgrade the legacy live-scan preview to the corrected complete map.
+      topic: !pointCloudSelection?.node.config?.topic || pointCloudSelection.node.config.topic === '/cloud_registered_global'
+        ? '/Laser_map' : pointCloudSelection.node.config.topic,
+      odomTopic: '/omni/tf_manager/body_odom_global',
       mapFrame: OMNI_MAP_FRAME,
       robotFrame: OMNI_BASE_FRAME,
     }),
@@ -745,7 +773,7 @@ export function ControlCockpit({
       <View pointerEvents={scene === 'map' ? 'box-none' : 'none'} style={StyleSheet.absoluteFill}>
         {connected ? (
           scene === 'video' ? (
-            <CameraFeed config={cameraConfig} width={width} height={height} />
+            <CameraFeed config={cameraConfig} width={width} height={height} hideFps />
           ) : (
             usePointCloudScene ? (
               <PointCloud3DWidget
@@ -778,9 +806,7 @@ export function ControlCockpit({
             <Text style={styles.offlineMessage}>{zh ? '退出控制页并前往设备页建立连接' : 'Exit control and connect from the Devices tab'}</Text>
           </View>
         )}
-        <View pointerEvents="none" style={styles.sceneShadeTop} />
-        <View pointerEvents="none" style={styles.sceneShadeBottom} />
-        {scene === 'video' && connected ? <View style={styles.reticle}><View style={styles.reticleH} /><View style={styles.reticleV} /></View> : null}
+        {scene === 'video' && connected && videoEnabled ? <View style={styles.reticle}><View style={styles.reticleH} /><View style={styles.reticleV} /></View> : null}
       </View>
 
       {connected ? (
@@ -789,23 +815,23 @@ export function ControlCockpit({
 
       <View pointerEvents="box-none" style={[styles.topBar, { paddingTop: Math.max(8, insets.top), paddingLeft: Math.max(10, insets.left + 8), paddingRight: Math.max(10, insets.right + 8) }]}>
         <View style={styles.topGroup}>
-          <CockpitButton icon="arrow-back" label={zh ? '退出控制' : 'Exit'} onPress={onExit} />
-          <View style={styles.connectionPill}>
-            <View style={[styles.connectionDot, { backgroundColor: connected ? theme.colors.statusConnected : theme.colors.statusError }]} />
+          <CockpitButton icon="arrow-back" label={zh ? '退出' : 'Exit'} onPress={onExit} />
+          <TouchableOpacity style={styles.connectionPill} onPress={() => Alert.alert(zh ? '连接信息' : 'Connection', url || '—')}>
+            <View style={[styles.connectionDot, { backgroundColor: controlServicePending ? theme.colors.statusConnecting : connected ? theme.colors.statusConnected : theme.colors.statusError }]} />
             <View>
-              <Text style={styles.connectionLabel}>{connected ? (zh ? '已连接' : 'Connected') : (zh ? '未连接' : 'Offline')}</Text>
-              <Text style={styles.connectionUrl} numberOfLines={1}>{isDemo ? (zh ? '演示模式' : 'Demo mode') : (url || '—')}</Text>
+              <Text style={styles.connectionLabel}>{controlServicePending ? (zh ? '服务未就绪' : 'Services pending') : connected ? (zh ? '已连接' : 'Connected') : (zh ? '未连接' : 'Offline')}</Text>
+
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.sceneSwitch}>
           <TouchableOpacity style={[styles.sceneSwitchItem, scene === 'video' && styles.sceneSwitchItemActive]} onPress={() => setScene('video')}>
-            <Ionicons name="videocam-outline" size={17} color={scene === 'video' ? '#FFFFFF' : theme.colors.textSecondary} />
+            <Ionicons name="videocam-outline" size={17} color={scene === 'video' ? theme.colors.textPrimary : theme.colors.textSecondary} />
             <Text style={[styles.sceneSwitchText, scene === 'video' && styles.sceneSwitchTextActive]}>{zh ? '视频' : 'Video'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.sceneSwitchItem, scene === 'map' && styles.sceneSwitchItemActive]} onPress={() => setScene('map')}>
-            <Ionicons name="map-outline" size={17} color={scene === 'map' ? '#FFFFFF' : theme.colors.textSecondary} />
+            <Ionicons name="map-outline" size={17} color={scene === 'map' ? theme.colors.textPrimary : theme.colors.textSecondary} />
             <Text style={[styles.sceneSwitchText, scene === 'map' && styles.sceneSwitchTextActive]}>
               {usePointCloudScene ? (zh ? '点云' : 'Point cloud') : (zh ? '地图' : 'Map')}
             </Text>
@@ -813,48 +839,56 @@ export function ControlCockpit({
         </View>
 
         <View style={styles.topGroup}>
-          <EmergencyStop />
+          <CockpitButton icon="settings-outline" label={zh ? '设置' : 'Settings'} onPress={() => setShowCockpitSettings(true)} />
+          <EmergencyStop postureToggle />
         </View>
       </View>
 
-      <View pointerEvents="box-none" style={[styles.rightDock, { right: Math.max(12, insets.right + 10) }]}>
-        <CockpitButton
-          icon="settings-outline"
-          label={scene === 'video'
-            ? (zh ? '视频设置' : 'Video settings')
-            : usePointCloudScene
-              ? (zh ? '点云设置' : 'Point-cloud settings')
-              : (zh ? '地图设置' : 'Map settings')}
-          active={editMode}
-          onPress={() => setEditMode(true)}
-        />
-        {navigationReady || navigationCancelable ? (
-          <CockpitButton
-            icon={navigationCancelable ? 'close-circle-outline' : 'locate-outline'}
-            label={navigationCancelable
-              ? (navigationCanceling ? (zh ? '取消中' : 'Canceling') : (zh ? '取消导航' : 'Cancel navigation'))
-              : navigationStale
-                ? (zh ? '同步导航状态' : 'Syncing navigation')
-                : (zh ? '长按选点' : 'Long-press goal')}
-            active={scene === 'map' || navigationCancelable}
-            danger={navigationCancelable}
-            onPress={navigationCancelable ? confirmCancelNavigation : () => setScene('map')}
-          />
-        ) : null}
-        <CockpitButton
-          icon="navigate-circle-outline"
-          label={missionActive ? missionStateLabel(missionState, zh) : (zh ? '巡检任务' : 'Inspection')}
-          active={missionActive}
-          onPress={openInspectionPanel}
-        />
-        <CockpitButton icon="options-outline" label={zh ? '机器人动作' : 'Actions'} onPress={onOpenRobotActions} />
-        <TravelSpeedControl />
+      <View pointerEvents="box-none" style={[styles.telemetryDock, { left: Math.max(12, insets.left + 10) }]}>
+        <CockpitTelemetry zh={zh} />
+        <View style={{ paddingHorizontal: 10, backgroundColor: theme.colors.bgElevated + 'EB', borderRadius: 8 }}><TrafficPanel compact /></View>
+      </View>
+      <View pointerEvents="box-none" style={[styles.controlDock, { bottom: Math.max(12, insets.bottom + 8) }, pendingMapGoal && scene === 'map' && !navigationActive ? { display: 'none' } : null]}>
+        <View style={styles.dockRow}>
+          <MappingControl cockpit />
+          <RouteRecordingControl cockpit />
+        </View>
+        <View style={styles.dockRow}>
+          <ControlAuthorityButton cockpit />
+          <PostureControl cockpit />
+        </View>
+        <View style={styles.dockRow}>
+          <CockpitButton icon="navigate-circle-outline" label={missionActive ? missionStateLabel(missionState, zh) : (zh ? '巡检任务' : 'Inspection')}
+            active={missionActive} onPress={openInspectionPanel} />
+          <CockpitButton icon={missionState === MISSION_STATE.PAUSED ? 'play' : 'pause'}
+            disabled={!missionActive || controlling}
+            label={missionState === MISSION_STATE.PAUSED ? (zh ? '继续巡检' : 'Resume') : (zh ? '暂停巡检' : 'Pause')}
+            onPress={() => transport && !controlling && void runMissionControl((mid) =>
+              missionState === MISSION_STATE.PAUSED ? resumeMission(transport, mid) : pauseMission(transport, mid))} />
+          <CockpitButton icon="stop-circle-outline" label={zh ? '停止巡检' : 'Stop patrol'} danger
+            disabled={!missionActive || controlling} onPress={confirmCancelMission} />
+        </View>
+        <InspectionProgress zh={zh} />
+        {!missionActive && (navigationError || navigationKnownActive || (navigation && navigation.state !== NAVIGATION_STATE.IDLE)) ?
+          <Text style={styles.navigationFeedback}>
+            {navigationError || (navigationStale
+              ? (zh ? '导航状态同步中，可取消当前目标' : 'Navigation status is stale; you can cancel the goal')
+              : `${navigationStateLabel(navigation?.state ?? NAVIGATION_STATE.IDLE, zh)} · ${Math.max(0, navigation?.remaining_distance_m ?? 0).toFixed(1)} m`)}
+          </Text> : null}
+        {navigationReady || navigationCancelable ? <CockpitButton
+          icon={navigationCancelable ? 'close-circle-outline' : 'locate-outline'}
+          label={navigationCancelable ? (zh ? '取消导航' : 'Cancel navigation') : (zh ? '长按地图选点' : 'Long-press map')}
+          danger={navigationCancelable} onPress={navigationCancelable ? confirmCancelNavigation : () => setScene('map')} /> : null}
+        <View style={styles.dockRow}>
+          <TravelSpeedControl />
+          <RecordingControl zh={zh} />
+        </View>
       </View>
 
       {pendingMapGoal && scene === 'map' && !navigationActive ? (
         <View
           accessibilityLabel={zh ? '导航目标编辑器' : 'Navigation goal editor'}
-          style={[styles.goalEditor, { bottom: Math.max(66, insets.bottom + 58) }]}
+          style={[styles.goalEditor, { bottom: Math.max(12, insets.bottom + 8) }]}
         >
           <View style={styles.goalEditorCopy}>
             <Text style={styles.goalEditorTitle}>
@@ -888,36 +922,13 @@ export function ControlCockpit({
             disabled={navigationSubmitting}
             onPress={() => void submitMapGoal(pendingMapGoal)}
           >
-            <Ionicons name="navigate" size={16} color="#061014" />
+            <Ionicons name="navigate" size={16} color={theme.colors.onAccent} />
             <Text style={styles.goalEditorSubmitText}>
               {navigationSubmitting ? (zh ? '下发中…' : 'Sending…') : (zh ? '开始导航' : 'Navigate')}
             </Text>
           </TouchableOpacity>
         </View>
       ) : null}
-
-      <View pointerEvents="none" style={styles.bottomCenterStatus}>
-        <Text style={styles.bottomCenterTitle}>
-          {scene === 'video'
-            ? (zh ? '实时画面' : 'LIVE VIEW')
-            : usePointCloudScene
-              ? (zh ? '三维地图' : '3D MAP')
-              : (zh ? '实时地图' : 'LIVE MAP')}
-        </Text>
-        <Text style={styles.bottomCenterValue}>
-          {missionActive
-            ? `${missionStateLabel(missionState, zh)} · ${Math.round(Math.max(0, Math.min(1, mission?.progress || 0)) * 100)}%`
-            : navigation && !navigationStale && navigation.state !== NAVIGATION_STATE.IDLE
-              ? `${navigationStateLabel(navigation.state, zh)} · ${Math.max(0, navigation.remaining_distance_m).toFixed(1)} m`
-              : navigationKnownActive && navigationStale
-                ? (zh ? '导航状态同步中，可取消当前目标' : 'Navigation status is stale; the current goal can still be canceled')
-              : navigationError
-                ? navigationError
-                : navigationReady && scene === 'map'
-                  ? (zh ? '长按地图选择目标，可用 X/Y 按钮微调' : 'Long-press to select; use X/Y buttons to adjust')
-            : (zh ? '左摇杆 X / Y · 右摇杆 YAW' : 'Left X / Y · Right YAW')}
-        </Text>
-      </View>
 
       {isDemo ? (
         <TouchableOpacity style={[styles.demoPill, { left: Math.max(12, insets.left + 10) }]} onPress={onExitDemo}>
@@ -932,6 +943,17 @@ export function ControlCockpit({
         <LayoutManager />
       </View>
 
+      <Modal visible={showCockpitSettings} transparent animationType="fade" onRequestClose={() => setShowCockpitSettings(false)}>
+        <View style={[styles.modalOverlay, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ScrollView style={{ maxHeight: '90%', width: 370, maxWidth: '90%', borderRadius: 18, backgroundColor: theme.colors.bgElevated }} contentContainerStyle={{ padding: 16, gap: 12 }}>
+            <Text style={{ color: theme.colors.textPrimary, fontSize: 18, fontWeight: '700' }}>{zh ? '控制台设置' : 'Cockpit settings'}</Text>
+            <TransmissionSettings />
+            <CockpitButton icon="image-outline" label={zh ? '画面设置' : 'View settings'} onPress={() => { setShowCockpitSettings(false); setEditMode(true); }} />
+            <CockpitButton icon="map-outline" label={zh ? '建图 / 录制路径 / 机器人动作' : 'Mapping / Route recording / Robot actions'} onPress={() => { setShowCockpitSettings(false); onOpenRobotActions(); }} />
+            <CockpitButton icon="close" label={zh ? '关闭' : 'Close'} onPress={() => setShowCockpitSettings(false)} />
+          </ScrollView>
+        </View>
+      </Modal>
       <WidgetSettings
         visible={editMode}
         widgetName={scene === 'video'
@@ -1057,7 +1079,7 @@ export function ControlCockpit({
                   }) : null}
                 </ScrollView>
                 <TouchableOpacity disabled={inspectionDispatchBlocked} style={[styles.dispatchButton, inspectionDispatchBlocked && styles.dispatchButtonDisabled]} onPress={dispatchSelectedRoute}>
-                  <Ionicons name={dispatching ? 'hourglass-outline' : 'send'} size={18} color="#061014" />
+                  <Ionicons name={dispatching ? 'hourglass-outline' : 'send'} size={18} color={theme.colors.onAccent} />
                   <Text style={styles.dispatchButtonText}>{dispatching ? (zh ? '正在下发…' : 'Dispatching…') : (zh ? '开始巡检任务' : 'Start inspection')}</Text>
                 </TouchableOpacity>
                 {robotStateStale || !robotStrip ? <Text style={styles.dispatchBlockReason}>{zh ? '等待机器人安全状态…' : 'Waiting for robot safety state…'}</Text> : null}
@@ -1074,53 +1096,50 @@ export function ControlCockpit({
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#020607', overflow: 'hidden' },
-  offlineBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#061014' },
+const createStyles = (theme: AppTheme) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.colors.bgBase, overflow: 'hidden' },
+  offlineBackground: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: theme.colors.bgBase },
   offlineTitle: { color: theme.colors.textPrimary, fontSize: 19, fontWeight: '700' },
   offlineMessage: { color: theme.colors.textMuted, fontSize: 13 },
-  sceneShadeTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 92, backgroundColor: '#0206079A' },
-  sceneShadeBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 150, backgroundColor: '#02060768' },
   reticle: { position: 'absolute', left: '50%', top: '50%', width: 42, height: 42, marginLeft: -21, marginTop: -21, borderRadius: 21, borderWidth: 1, borderColor: '#FFFFFF38' },
   reticleH: { position: 'absolute', width: 12, height: 1, backgroundColor: '#FFFFFF60', top: 20, left: 15 },
   reticleV: { position: 'absolute', width: 1, height: 12, backgroundColor: '#FFFFFF60', top: 15, left: 20 },
+  telemetryDock: { position: 'absolute', top: 61, maxWidth: '57%' },
+  navigationFeedback: { color: theme.colors.textPrimary, fontSize: 10, textAlign: 'center' },
+  controlDock: { position: 'absolute', left: '25%', right: '25%', padding: 8, borderRadius: 14, gap: 5, backgroundColor: theme.colors.bgElevated + 'F2', borderWidth: 1, borderColor: theme.colors.borderDefault },
+  dockRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   topBar: { position: 'absolute', top: 0, left: 0, right: 0, minHeight: 66, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, paddingBottom: 8 },
   topGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cockpitButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 13, borderRadius: 13, borderWidth: 1, borderColor: '#FFFFFF28', backgroundColor: '#071116CE' },
-  cockpitButtonActive: { borderColor: theme.colors.accentPrimary + 'AA', backgroundColor: '#27515BDD' },
-  cockpitButtonDanger: { borderColor: theme.colors.statusError + '99', backgroundColor: '#311519DD' },
-  cockpitButtonText: { color: theme.colors.textPrimary, fontSize: 12, fontWeight: '700' },
+  cockpitButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 8, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.bgElevated + 'EB' },
+  cockpitButtonActive: { borderColor: theme.colors.accentPrimary + 'AA', backgroundColor: theme.colors.accentPrimaryMuted },
+  cockpitButtonDanger: { borderColor: theme.colors.statusError + '99', backgroundColor: theme.colors.statusErrorGlow },
+  cockpitButtonText: { color: theme.colors.textPrimary, fontSize: 10, fontWeight: '700' },
   cockpitButtonDangerText: { color: theme.colors.statusError },
-  connectionPill: { maxWidth: 230, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, borderRadius: 13, borderWidth: 1, borderColor: '#FFFFFF22', backgroundColor: '#071116CE' },
+  connectionPill: { maxWidth: 230, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, borderRadius: 13, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.bgElevated + 'EB' },
   connectionDot: { width: 8, height: 8, borderRadius: 4 },
   connectionLabel: { color: theme.colors.textPrimary, fontSize: 11, fontWeight: '700' },
-  connectionUrl: { maxWidth: 170, color: theme.colors.textMuted, fontFamily: 'SpaceMono', fontSize: 8, marginTop: 1 },
-  sceneSwitch: { flexDirection: 'row', padding: 3, borderRadius: 13, borderWidth: 1, borderColor: '#FFFFFF22', backgroundColor: '#071116D9' },
+  sceneSwitch: { flexDirection: 'row', padding: 3, borderRadius: 13, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.bgElevated + 'EB' },
   sceneSwitchItem: { height: 38, minWidth: 82, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 13, borderRadius: 10 },
-  sceneSwitchItemActive: { backgroundColor: '#FFFFFF18' },
+  sceneSwitchItemActive: { backgroundColor: theme.colors.accentPrimaryMuted },
   sceneSwitchText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' },
-  sceneSwitchTextActive: { color: '#FFFFFF' },
-  rightDock: { position: 'absolute', top: 92, flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
+  sceneSwitchTextActive: { color: theme.colors.textPrimary },
   hiddenLayoutManager: { position: 'absolute', width: 0, height: 0, overflow: 'hidden' },
-  goalEditor: { position: 'absolute', alignSelf: 'center', minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.accentPrimary + 'AA', backgroundColor: '#071116F2' },
+  goalEditor: { position: 'absolute', alignSelf: 'center', maxWidth: '50%', minHeight: 54, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.accentPrimary + 'AA', backgroundColor: theme.colors.bgElevated + 'F2' },
   goalEditorCopy: { minWidth: 128, paddingHorizontal: 3 },
   goalEditorTitle: { color: theme.colors.textPrimary, fontSize: 11, fontWeight: '800' },
   goalEditorCoordinates: { color: theme.colors.accentPrimary, fontFamily: 'SpaceMono', fontSize: 9, marginTop: 3 },
   goalNudgeRow: { flexDirection: 'row', gap: 4 },
-  goalNudgeButton: { minWidth: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 9, borderWidth: 1, borderColor: '#FFFFFF24', backgroundColor: '#FFFFFF0C' },
+  goalNudgeButton: { minWidth: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 9, borderWidth: 1, borderColor: theme.colors.borderDefault, backgroundColor: theme.colors.overlayMedium },
   goalNudgeButtonText: { color: theme.colors.textPrimary, fontFamily: 'SpaceMono', fontSize: 10, fontWeight: '700' },
-  goalEditorCancel: { height: 36, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 9, borderWidth: 1, borderColor: '#FFFFFF24' },
+  goalEditorCancel: { height: 36, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 9, borderWidth: 1, borderColor: theme.colors.borderDefault },
   goalEditorCancelText: { color: theme.colors.textSecondary, fontSize: 10, fontWeight: '700' },
   goalEditorSubmit: { height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 12, borderRadius: 9, backgroundColor: theme.colors.accentPrimary },
   goalEditorSubmitDisabled: { opacity: 0.45 },
-  goalEditorSubmitText: { color: '#061014', fontSize: 10, fontWeight: '800' },
-  bottomCenterStatus: { position: 'absolute', bottom: 15, left: '35%', right: '35%', minHeight: 41, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FFFFFF18', backgroundColor: '#061014B8' },
-  bottomCenterTitle: { color: theme.colors.textMuted, fontSize: 8, fontWeight: '700', letterSpacing: 1 },
-  bottomCenterValue: { color: theme.colors.textValue, fontFamily: 'SpaceMono', fontSize: 9, marginTop: 2 },
-  demoPill: { position: 'absolute', bottom: 15, flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 38, paddingHorizontal: 11, borderRadius: 11, backgroundColor: '#2D2214DD', borderWidth: 1, borderColor: theme.colors.statusConnecting + '55' },
+  goalEditorSubmitText: { color: theme.colors.onAccent, fontSize: 10, fontWeight: '800' },
+  demoPill: { position: 'absolute', bottom: 15, flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 38, paddingHorizontal: 11, borderRadius: 11, backgroundColor: theme.colors.bgElevated + 'EB', borderWidth: 1, borderColor: theme.colors.statusConnecting + '55' },
   demoPillText: { color: theme.colors.statusConnecting, fontSize: 10, fontWeight: '600' },
   modalOverlay: { flex: 1, alignItems: 'flex-end', backgroundColor: '#00000070' },
-  missionPanel: { width: 420, maxWidth: '64%', height: '100%', paddingLeft: 18, paddingTop: 18, paddingBottom: 18, backgroundColor: '#0A151BEF', borderLeftWidth: 1, borderLeftColor: theme.colors.borderDefault },
+  missionPanel: { width: 420, maxWidth: '64%', height: '100%', paddingLeft: 18, paddingTop: 18, paddingBottom: 18, backgroundColor: theme.colors.bgElevated, borderLeftWidth: 1, borderLeftColor: theme.colors.borderDefault },
   panelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.borderSubtle },
   panelTitle: { color: theme.colors.textPrimary, fontSize: 19, fontWeight: '700' },
   panelSubtitle: { color: theme.colors.textMuted, fontSize: 11, marginTop: 3 },
@@ -1134,7 +1153,7 @@ const styles = StyleSheet.create({
   routesList: { flex: 1 },
   routesContent: { paddingBottom: 10 },
   routeEmpty: { color: theme.colors.textMuted, fontSize: 12, textAlign: 'center', paddingVertical: 35 },
-  routeRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 7, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: '#FFFFFF08' },
+  routeRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 7, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.overlayLight },
   routeRowSelected: { borderColor: theme.colors.accentPrimary + '99', backgroundColor: theme.colors.accentPrimaryMuted },
   routeRowBlocked: { opacity: 0.72 },
   routeIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.bgSurface },
@@ -1146,7 +1165,7 @@ const styles = StyleSheet.create({
   routeBlockReason: { color: theme.colors.statusConnecting, fontSize: 10, lineHeight: 14, marginTop: 3 },
   dispatchButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 13, backgroundColor: theme.colors.accentPrimary },
   dispatchButtonDisabled: { opacity: 0.4 },
-  dispatchButtonText: { color: '#061014', fontSize: 13, fontWeight: '800' },
+  dispatchButtonText: { color: theme.colors.onAccent, fontSize: 13, fontWeight: '800' },
   dispatchBlockReason: { color: theme.colors.textMuted, fontSize: 10, lineHeight: 14, textAlign: 'center' },
   activeMissionCard: { marginTop: 18, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.accentPrimary + '66', backgroundColor: theme.colors.accentPrimaryMuted },
   activeMissionEyebrow: { color: theme.colors.accentPrimary, fontSize: 9, fontWeight: '800', letterSpacing: 1 },

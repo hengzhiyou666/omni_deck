@@ -84,6 +84,9 @@ DEFAULT_RULES: dict[str, RoleRule] = {
         ),
         service_topics=(
             "/omni/control/authority",
+            "/omni/control/set_travel_speed",
+            "/omni/recording/start",
+            "/omni/recording/stop",
             "/omni/safety/arm_supervisor",
             "/omni/safety/reset_estop",
             "/omni/mission/dispatch",

@@ -4,12 +4,14 @@ import type { ConnectionStatus, SavedConnection } from '../types/ros';
 import type { ConnectOptions, Transport, TransportType } from '../lib/transport';
 import { RosbridgeTransport } from '../lib/rosbridge-transport';
 import { FoxgloveTransport } from '../lib/foxglove-transport';
+import { BleTransport } from '../lib/ble-transport';
 import { DemoTransport } from '../lib/demo-transport';
 import { DEFAULTS } from '../constants/defaults';
 import { buildWebSocketUrl } from '../lib/ros';
 import { bestEffortReleaseControl } from '../lib/control-authority';
 import { parseConnectionInput } from '../lib/connection-url';
 import { usePairingStore } from './usePairingStore';
+import { robotBle } from '../modules/expo-robot-ble/src';
 
 interface ConnectionState {
   url: string;
@@ -75,10 +77,12 @@ function normalizeSavedConnections(value: unknown): SavedConnection[] {
     if (candidate.transport !== undefined
       && candidate.transport !== 'rosbridge'
       && candidate.transport !== 'foxglove'
-      && candidate.transport !== 'demo') continue;
+      && candidate.transport !== 'demo' && candidate.transport !== 'ble') continue;
 
     const transport = candidate.transport ?? 'rosbridge';
-    const url = transport === 'demo'
+    const url = transport === 'ble'
+      ? (/^ble:\/\/(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(candidate.url) ? candidate.url : null)
+      : transport === 'demo'
       ? (/^demo:\/\/[^\s]+$/.test(candidate.url.trim()) ? candidate.url.trim() : null)
       : buildWebSocketUrl(candidate.url, transport);
     if (!url) continue;
@@ -199,7 +203,9 @@ export const useRosStore = create<RosStore>((set, get) => ({
       if (reconnectTimer) clearTimeout(reconnectTimer);
       set({ reconnectAttempts: 0, reconnectTimer: null });
     }
-    const canonicalUrl = transportType === 'demo'
+    const canonicalUrl = transportType === 'ble'
+      ? (/^ble:\/\/(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(url) ? url : null)
+      : transportType === 'demo'
       ? url
       : buildWebSocketUrl(url, transportType === 'foxglove' ? 'foxglove' : 'rosbridge');
     if (!canonicalUrl) {
@@ -217,7 +223,9 @@ export const useRosStore = create<RosStore>((set, get) => ({
       return;
     }
 
-    const transport = transportType === 'demo'
+    const transport = transportType === 'ble'
+      ? new BleTransport()
+      : transportType === 'demo'
       ? new DemoTransport()
       : transportType === 'foxglove'
         ? new FoxgloveTransport()
@@ -247,6 +255,8 @@ export const useRosStore = create<RosStore>((set, get) => ({
     }
 
     try {
+      if (robotBle?.prepareNetworkEndpoint) await robotBle.prepareNetworkEndpoint(canonicalUrl);
+      if (get().transport !== transport) return;
       const loginOptions = transportType === 'foxglove' ? resolveLoginOptions(canonicalUrl) : undefined;
       await transport.connect(canonicalUrl, loginOptions);
       if (get().transport !== transport) {
@@ -332,6 +342,7 @@ export const useRosStore = create<RosStore>((set, get) => ({
     if (transport) {
       transport.disconnect();
     }
+    void robotBle?.releaseWifi?.();
   },
 
   reset: () =>

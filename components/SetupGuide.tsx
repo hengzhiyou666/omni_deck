@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -11,6 +13,7 @@ interface Props {
 }
 
 export function SetupGuide({ visible, onClose, onTryDemo }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const language = useSettingsStore((s) => s.language);
   const zh = language === 'zh';
   const [showCommands, setShowCommands] = useState(false);
@@ -76,10 +79,11 @@ export function SetupGuide({ visible, onClose, onTryDemo }: Props) {
 }
 
 function GuideStep({ number, title, message }: { number: string; title: string; message: string }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return <View style={styles.step}><View style={styles.stepNumber}><Text style={styles.stepNumberText}>{number}</Text></View><View style={styles.stepCopy}><Text style={styles.stepTitle}>{title}</Text><Text style={styles.stepMessage}>{message}</Text></View></View>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#000000A6' },
   sheet: { maxHeight: '90%', backgroundColor: theme.colors.bgElevated, borderTopLeftRadius: theme.radius.xl, borderTopRightRadius: theme.radius.xl, borderWidth: 1, borderBottomWidth: 0, borderColor: theme.colors.borderDefault },
   handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: theme.colors.borderDefault, alignSelf: 'center', marginTop: 9 },

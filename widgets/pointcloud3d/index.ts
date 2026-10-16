@@ -9,16 +9,16 @@ export const pointCloud3DWidget: WidgetDefinition = {
   category: 'sensor',
   supportedMessageTypes: ['sensor_msgs/msg/PointCloud2'],
   defaultConfig: {
-    topic: '/cloud_registered_global',
+    topic: '/Laser_map',
     mapFrame: OMNI_MAP_FRAME,
     robotFrame: OMNI_BASE_FRAME,
-    odomTopic: '/Odometry',
+    odomTopic: '/omni/tf_manager/body_odom_global',
     viewMeters: 20,
   },
   configSchema: [
     {
       key: 'topic',
-      label: 'Registered Point Cloud',
+      label: 'Map Point Cloud',
       type: 'topic',
       topicMessageTypes: ['sensor_msgs/msg/PointCloud2'],
     },

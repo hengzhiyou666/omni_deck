@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Canvas, Path, Skia, Line, vec } from '@shopify/react-native-skia';
@@ -37,6 +39,7 @@ function seriesLabel(s: SeriesConfig): string {
 }
 
 export function ChartWidget(props: Partial<WidgetProps>) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const status = useRosStore((s) => s.connection.status);
 
@@ -256,7 +259,7 @@ export function ChartWidget(props: Partial<WidgetProps>) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { backgroundColor: theme.colors.bgBase, overflow: 'hidden' },
   titleRow: {
     height: TITLE_H,

@@ -360,7 +360,7 @@ export async function setAutonomyMode(
     throw new Error('MODE_ROUTE_RECORDING requires route_id');
   }
   if ((options.desiredMode === AUTONOMY_MODE.SINGLE_POINT_READY ||
-       options.desiredMode === AUTONOMY_MODE.ROUTE_RECORDING) &&
+       (options.desiredMode === AUTONOMY_MODE.ROUTE_RECORDING && !options.mappingSessionId)) &&
       (!options.mapId || !Number.isInteger(options.mapVersion) ||
        (options.mapVersion ?? 0) <= 0 || !options.mapChecksum)) {
     throw new Error('Selected autonomy mode requires a complete map identity');
@@ -376,9 +376,7 @@ export async function setAutonomyMode(
       desired_mode: options.desiredMode,
       map_id: options.mapId ?? '',
       map_version: options.mapVersion ?? 0,
-      mapping_session_id: options.desiredMode === AUTONOMY_MODE.MAPPING
-        ? options.mappingSessionId
-        : '',
+      mapping_session_id: options.mappingSessionId ?? '',
       initial_x: options.initialX ?? 0,
       initial_y: options.initialY ?? 0,
       initial_z: options.initialZ ?? 0,

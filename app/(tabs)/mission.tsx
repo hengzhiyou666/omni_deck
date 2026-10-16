@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -105,6 +107,7 @@ function stateColor(state: number): string {
 }
 
 export default function MissionTab() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const status = useRosStore((s) => s.connection.status);
   const transport = useRosStore((s) => s.transport);
   const url = useRosStore((s) => s.connection.url);
@@ -477,7 +480,7 @@ export default function MissionTab() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bgBase },
   scroll: { width: '100%', maxWidth: theme.sizes.contentMax, alignSelf: 'center', paddingHorizontal: 18, paddingBottom: 32 },
   scrollLandscape: { maxWidth: 960, paddingHorizontal: 24 },

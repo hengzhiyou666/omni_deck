@@ -16,6 +16,30 @@ import type { Transport } from '../../lib/transport';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+it('keeps missing authority as stale and recovers when the robot starts late', async () => {
+  jest.useFakeTimers();
+  let callback!: (message: any) => void;
+  let tree: any;
+  const unsubscribe = jest.fn();
+  const transport = { subscribe: jest.fn((_topic, _type, cb) => {
+    callback = cb; return { unsubscribe };
+  }) } as unknown as Transport;
+  try {
+    useRosStore.setState({ transport, connection: { status: 'connected', url: 'ws://robot:8765', ros: null, error: null } });
+    await act(async () => { tree = create(<ControlAuthoritySession />); });
+    await act(async () => { jest.advanceTimersByTime(4000); });
+    expect(useControlAuthorityStore.getState().status).toBe('stale');
+    expect(unsubscribe).not.toHaveBeenCalled();
+    await act(async () => { callback({ state: 1 }); });
+    expect(useControlAuthorityStore.getState().status).toBe('available');
+  } finally {
+    await act(async () => { tree?.unmount(); });
+    useControlAuthorityStore.getState().reset();
+    useRosStore.setState({ transport: null });
+    jest.useRealTimers();
+  }
+});
+
 it('keeps renewals and the subscription while both sticks change, and ignores old session replies', async () => {
   jest.useFakeTimers();
   let tree: any;

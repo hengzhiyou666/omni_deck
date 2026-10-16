@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -55,8 +57,9 @@ export function ControlAuthoritySession() {
     );
     const detectionTimeout = setTimeout(() => {
       if (useControlAuthorityStore.getState().status === 'detecting') {
-        // 旧 Bridge/VBot 不发布 typed authority；统一 teleop 对此状态保持失败关闭。
-        useControlAuthorityStore.getState().reset('unsupported');
+        // Missing telemetry cannot establish that the robot lacks authority
+        // support. Keep the subscription alive and recover when data arrives.
+        useControlAuthorityStore.getState().reset('stale');
       }
     }, DETECTION_TIMEOUT_MS);
 
@@ -119,7 +122,8 @@ export function ControlAuthoritySession() {
   return null;
 }
 
-export function ControlAuthorityButton({ compact = false }: { compact?: boolean }) {
+export function ControlAuthorityButton({ compact = false, cockpit = false }: { compact?: boolean; cockpit?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -257,6 +261,7 @@ export function ControlAuthorityButton({ compact = false }: { compact?: boolean 
           styles.button,
           compact && styles.compactButton,
           { borderColor: color + '66', backgroundColor: color + '11' },
+          cockpit && { minHeight: 40, backgroundColor: theme.colors.bgSurface, borderRadius: 10 },
           disabled && styles.disabled,
         ]}
       >
@@ -272,7 +277,7 @@ export function ControlAuthorityButton({ compact = false }: { compact?: boolean 
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { flexDirection: 'row' },
   button: {
     flexDirection: 'row',

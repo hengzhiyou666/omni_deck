@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -15,6 +17,7 @@ const WORKSPACES = [
 ] as const;
 
 export function ControlWorkspaceBar() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const language = useSettingsStore((s) => s.language);
   const layouts = useLayoutStore((s) => s.layouts);
   const activeLayoutId = useLayoutStore((s) => s.activeLayoutId);
@@ -59,7 +62,7 @@ export function ControlWorkspaceBar() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgElevated },
   hiddenManager: { position: 'absolute', width: 0, height: 0, overflow: 'hidden' },
   scrollContent: { gap: 7, paddingVertical: 9 },

@@ -1,5 +1,6 @@
 import 'react-native-get-random-values';
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { useThemeMode } from '../hooks/useAppTheme';
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -67,6 +68,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  const themeMode = useThemeMode();
   // 自主运行模式属于全局机器人状态，不能依赖“控制”页面是否挂载。否则切换到
   // 首页或任务页后，模式按钮和总览会继续显示上一张过期快照。
   useAutonomyRuntimeFeed();
@@ -116,10 +118,10 @@ function RootLayoutNav() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
-        <ThemeProvider value={DarkTheme}>
+        <ThemeProvider value={themeMode === 'dark' ? DarkTheme : DefaultTheme}>
           <ControlAuthoritySession />
           <TravelSpeedSession />
-          <StatusBar style="light" />
+          <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="alerts" options={{ headerShown: false, animation: 'slide_from_right' }} />
