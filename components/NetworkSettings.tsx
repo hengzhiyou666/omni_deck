@@ -8,6 +8,7 @@ import { parseHotspotConnection, waitForRobotControl } from '../lib/robot-hotspo
 import { useRosStore } from '../stores/useRosStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { usePairingStore } from '../stores/usePairingStore';
+import { useWifiStore } from '../stores/useWifiStore';
 import { ProductButton, ProductCard, SectionHeader } from './ProductUI';
 import { TrafficPanel } from './TrafficPanel';
 import { BluetoothConnect } from './BluetoothConnect';
@@ -17,6 +18,10 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
   const zh = useSettingsStore(s => s.language) === 'zh';
   const transport = useRosStore(s => s.transport);
   const connected = useRosStore(s => s.connection.status) === 'connected';
+  const savedConnections = useRosStore(s => s.savedConnections);
+  const savedWifi = useWifiStore(s => s.networks);
+  const wifiLoaded = useWifiStore(s => s.loaded);
+  const wifiError = useWifiStore(s => s.error);
   const [advanced, setAdvanced] = useState(false);
   const [stage, setStage] = useState('');
   const [ready, setReady] = useState(false);
@@ -27,14 +32,40 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
     useRosStore.getState().savedConnections.find(c => c.url.startsWith('wss://'))?.url || '');
   const [remoteUser, setRemoteUser] = useState(pairing?.user || 'operator');
   const [remoteToken, setRemoteToken] = useState(pairing?.token || '');
-  const [ssid, setSsid] = useState('dog4-0008');
-  const [password, setPassword] = useState('');
+  const [ssid, setSsid] = useState(() => useWifiStore.getState().selectedSsid || savedWifi[0]?.ssid || '');
+  const [password, setPassword] = useState(() => savedWifi.find(n => n.ssid === ssid)?.password || '');
+  const [remember, setRemember] = useState(true);
   const [networks, setNetworks] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
   const [endpoint, setEndpoint] = useState('ws://192.168.50.1:8765');
   const [snapshot, setSnapshot] = useState<any>(null);
   const ble = transport instanceof BleTransport && connected;
+  const savedBluetooth = savedConnections.filter(c => c.url.startsWith('ble://'));
+  useEffect(() => { void useWifiStore.getState().load(); }, []);
+  useEffect(() => {
+    if (!wifiLoaded || ssid) return;
+    const store = useWifiStore.getState();
+    const saved = store.networks.find(n => n.ssid === store.selectedSsid) || store.networks[0];
+    if (saved) { setSsid(saved.ssid); setPassword(saved.password); }
+  }, [wifiLoaded]);
+  const selectWifi = (name: string) => {
+    setSsid(name);
+    setPassword(savedWifi.find(n => n.ssid === name)?.password || '');
+    useWifiStore.getState().select(name);
+  };
+  const forgetWifi = async (name: string) => {
+    setPending(true);
+    try {
+      await useWifiStore.getState().forget(name);
+      if (ssid === name) {
+        const store = useWifiStore.getState();
+        const next = store.networks.find(n => n.ssid === store.selectedSsid);
+        setSsid(next?.ssid || ''); setPassword(next?.password || '');
+      }
+    } catch { /* The store exposes a non-sensitive persistence error below. */ }
+    finally { setPending(false); }
+  };
   useEffect(() => {
     // Credentials belong to the selected robot, never to the next BLE device.
     if (ble) { setHotspot(null); setReady(false); setNotice(''); }
@@ -57,11 +88,17 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
       const result = await transport.requestNetwork({ action, ...(action === 'scan' ? {} : { ssid, password }) });
       if (result.networks) setNetworks(result.networks);
       else {
-        setPassword('');
         if (result.endpoint) setEndpoint(result.endpoint);
         if (result.mode === 'hotspot' && result.password) setHotspot(parseHotspotConnection(result));
         if (result.mode === 'wifi') {
           setHotspot(null);
+          // Robot activation succeeded. Keep credentials even if the phone
+          // declines its Wi-Fi prompt or the data service is not ready yet.
+          try {
+            const store = useWifiStore.getState();
+            if (remember) await store.save(ssid, password);
+            else await store.forget(ssid);
+          } catch { /* Continue joining; persistence errors stay visible. */ }
           setNotice(zh ? `狗子已关闭热点并连接 ${ssid}。正在连接同一 Wi-Fi…` : `Hotspot closed. Robot joined ${ssid}. Joining the same Wi-Fi…`);
           await robotBle!.joinWifi(ssid, password, new URL(result.endpoint).hostname);
           await connectData(result.endpoint);
@@ -120,31 +157,64 @@ export function NetworkSettings({ onConnected }: { onConnected?: () => void }) {
     } catch (error) { setNotice((error as Error).message); }
     finally { setPending(false); setStage(''); }
   };
+  const reconnectBluetooth = async (url: string) => {
+    if (pending) return;
+    setPending(true); setReady(false); setNotice('');
+    setStage(zh ? '正在连接狗子蓝牙…' : 'Connecting robot Bluetooth…');
+    try {
+      useRosStore.getState().setTransportType('ble');
+      await useRosStore.getState().connectToUrl(url);
+      const current = useRosStore.getState();
+      if (current.connection.status !== 'connected' || !(current.transport instanceof BleTransport))
+        throw new Error(current.connection.error || (zh ? '蓝牙连接失败' : 'Bluetooth connection failed'));
+      setNotice(zh ? '蓝牙已连接，可选择 Wi-Fi 或切换热点。' : 'Bluetooth connected. Select Wi-Fi or configure the hotspot.');
+    } catch (error) { setNotice((error as Error).message); }
+    finally { setPending(false); setStage(''); }
+  };
+  const bluetoothSetup = <View style={{ gap: 8 }}>
+    {savedBluetooth.map(device => <ProductButton compact key={device.url}
+      label={`${zh ? '重新连接蓝牙' : 'Reconnect Bluetooth'} · ${device.name || device.url.slice(6)}`}
+      icon="bluetooth" variant="secondary" disabled={pending} onPress={() => void reconnectBluetooth(device.url)} />)}
+    <BluetoothConnect navigateOnConnect={false} />
+  </View>;
   const inputStyle = { borderWidth: 1, borderColor: theme.colors.borderDefault, borderRadius: 10,
     padding: 10, fontSize: 13, color: theme.colors.textPrimary, backgroundColor: theme.colors.bgInset };
   return <>
     <SectionHeader title={zh ? '网络与传输' : 'Network & streaming'} />
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
       <ProductButton compact label={zh ? '狗子热点' : 'Robot hotspot'} variant={mode === 'hotspot' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('hotspot'); setNotice(''); }} />
-      <ProductButton compact label={zh ? '连接外部 Wi-Fi' : 'External Wi-Fi'} variant={mode === 'wifi' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('wifi'); setSsid(''); setPassword(''); setNotice(''); }} />
+      <ProductButton compact label={zh ? '连接外部 Wi-Fi' : 'External Wi-Fi'} variant={mode === 'wifi' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('wifi'); setNotice(''); }} />
       <ProductButton compact label={zh ? '公网连接' : 'Remote access'} variant={mode === 'remote' ? 'primary' : 'secondary'} disabled={pending} onPress={() => { setMode('remote'); setReady(false); setNotice(''); }} />
     </View>
     {mode === 'hotspot' ? <ProductCard>
       <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 15 }}>{zh ? '手机直连狗子' : 'Connect directly to robot'}</Text>
       <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginVertical: 10 }}>{zh ? '连接蓝牙后点击下方按钮，确认系统 Wi-Fi 弹窗即可。密码和地址自动填写。' : 'Connect Bluetooth, tap below, then confirm the system Wi-Fi prompt. Password and address are filled automatically.'}</Text>
-      {!ble && !hotspot && <BluetoothConnect navigateOnConnect={false} />}
+      {!ble && !hotspot && bluetoothSetup}
       <ProductButton label={pending ? (stage || (zh ? '正在配置…' : 'Configuring…')) : ready ? (zh ? '重新连接热点' : 'Reconnect hotspot') : (zh ? '一键连接热点' : 'Connect hotspot')}
         icon="wifi-outline" disabled={pending || (!ble && !hotspot)} onPress={() => void quickConnect()} />
       {hotspot && <Text selectable style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 10 }}>{zh ? '电脑连接同一热点：' : 'PC: join the same hotspot: '}{hotspot.ssid}{'\n'}{zh ? '热点密码：' : 'Password: '}{hotspot.password}{'\n'}{zh ? 'Foxglove 地址：' : 'Foxglove: '}{hotspot.endpoint}</Text>}
     </ProductCard> : mode === 'wifi' ? <ProductCard>
       <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 15 }}>{zh ? '关闭热点，连接外部 Wi-Fi' : 'Close hotspot and join Wi-Fi'}</Text>
       <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginVertical: 10 }}>{zh ? '先通过蓝牙连接狗子，再选择网络并输入密码。狗子和手机将切换到同一个 Wi-Fi，连接地址自动填写。仅在狗子静止、任务结束后操作。' : 'Connect Bluetooth, select a network and enter its password. Robot and phone join the same Wi-Fi; the address is filled automatically. Switch only while idle.'}</Text>
-      {!ble && <BluetoothConnect navigateOnConnect={false} />}
+      {!ble && bluetoothSetup}
       <View style={{ gap: 8 }}>
+        {savedWifi.length > 0 && <>
+          <Text style={{ color: theme.colors.textSecondary }}>{zh ? '此手机已记住的 Wi-Fi' : 'Wi-Fi saved on this phone'}</Text>
+          {savedWifi.map(network => <View key={network.ssid} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <ProductButton compact label={network.ssid} variant={ssid === network.ssid ? 'secondary' : 'ghost'} disabled={pending} onPress={() => selectWifi(network.ssid)} />
+            <ProductButton compact label={zh ? '忘记' : 'Forget'} variant="ghost" disabled={pending} onPress={() => void forgetWifi(network.ssid)} />
+          </View>)}
+        </>}
         <ProductButton compact label={zh ? '扫描附近 Wi-Fi' : 'Scan nearby Wi-Fi'} variant="secondary" disabled={!ble || pending} onPress={() => void request('scan')} />
-        {networks.map(name => <ProductButton compact key={name} label={name} variant={ssid === name ? 'secondary' : 'ghost'} disabled={pending} onPress={() => setSsid(name)} />)}
-        <TextInput accessibilityLabel="Wi-Fi SSID" placeholder={zh ? 'Wi-Fi 名称' : 'Wi-Fi name'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={ssid} onChangeText={setSsid} editable={!pending} autoCapitalize="none" />
+        {networks.filter(name => !savedWifi.some(n => n.ssid === name)).map(name => <ProductButton compact key={name} label={name} variant={ssid === name ? 'secondary' : 'ghost'} disabled={pending} onPress={() => selectWifi(name)} />)}
+        <TextInput accessibilityLabel="Wi-Fi SSID" placeholder={zh ? 'Wi-Fi 名称' : 'Wi-Fi name'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={ssid} onChangeText={selectWifi} editable={!pending} autoCapitalize="none" autoCorrect={false} />
         <TextInput accessibilityLabel={zh ? 'Wi-Fi 密码' : 'Wi-Fi password'} placeholder={zh ? 'Wi-Fi 密码' : 'Wi-Fi password'} placeholderTextColor={theme.colors.textMuted} style={inputStyle} value={password} onChangeText={setPassword} secureTextEntry editable={!pending} autoCapitalize="none" />
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: theme.colors.textSecondary }}>{zh ? '记住此 Wi-Fi' : 'Remember this Wi-Fi'}</Text>
+          <Switch accessibilityLabel={zh ? '记住此 Wi-Fi' : 'Remember this Wi-Fi'} value={remember} onValueChange={setRemember} disabled={pending} trackColor={{ true: theme.colors.accentPrimary }} />
+        </View>
+        {!!wifiError && <Text style={{ color: theme.colors.statusError }}>{zh ? '未能读取或更新已记住的 Wi-Fi，请重试。' : 'Could not read or update saved Wi-Fi. Please retry.'}</Text>}
+        {!!wifiError && !wifiLoaded && <ProductButton compact label={zh ? '重新读取 Wi-Fi 记录' : 'Reload saved Wi-Fi'} variant="secondary" disabled={pending} onPress={() => void useWifiStore.getState().load()} />}
         <ProductButton label={pending ? (stage || (zh ? '正在切换…' : 'Switching…')) : (zh ? '关闭热点并连接此 Wi-Fi' : 'Close hotspot and connect')} icon="wifi-outline" disabled={!ble || pending || !ssid || password.length < 8} onPress={apply} />
       </View>
     </ProductCard> : <ProductCard>

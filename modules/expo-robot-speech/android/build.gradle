@@ -1,0 +1,35 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'expo.modules.robotspeech'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.robotspeech"
+  compileSdkVersion safeExtGet("compileSdkVersion", 34)
+
+  defaultConfig {
+    minSdkVersion safeExtGet("minSdkVersion", 23)
+    targetSdkVersion safeExtGet("targetSdkVersion", 34)
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${safeExtGet('kotlinVersion', '1.9.0')}"
+  implementation 'com.alphacephei:vosk-android:0.3.75@aar'
+  implementation 'net.java.dev.jna:jna:5.18.1@aar'
+}
+
+tasks.named('preBuild') {
+  doFirst {
+    if (!file('src/main/assets/model-cn/am/final.mdl').isFile() || !file('src/main/assets/model-cn/uuid').isFile()) {
+      throw new GradleException('Missing Chinese speech model. From omni_deck run: python3 scripts/prepare-speech-model.py <vosk-model-small-cn-0.22.zip>')
+    }
+  }
+}
+
+def safeExtGet(prop, fallback) {
+  rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}

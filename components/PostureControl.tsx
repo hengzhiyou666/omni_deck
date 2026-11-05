@@ -1,12 +1,12 @@
 import { useThemeStyles } from '../hooks/useAppTheme';
 import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { theme } from '../constants/theme';
 import { useTranslation, type TranslationKey } from '../lib/i18n';
 import { useRosStore } from '../stores/useRosStore';
-import { requestPosture, usePostureStore, type PostureCommand } from '../lib/posture-actions';
+import { observePostureStatus, requestPosture, usePostureStore, type PostureCommand } from '../lib/posture-actions';
 export { POSTURE_COMMAND_TOPIC, POSTURE_STATUS_TOPIC, POSTURE_MESSAGE_TYPE,
   POSTURE_COMMANDS, buildPostureCommand, parsePostureStatus } from '../lib/posture-actions';
 export type { PostureCommand } from '../lib/posture-actions';
@@ -18,6 +18,10 @@ export function PostureControl({ compact = false, cockpit = false }: { compact?:
   const url = useRosStore((state) => state.connection.url);
   const { t } = useTranslation();
   const pending = usePostureStore((state) => state.pending);
+  useEffect(() => {
+    if (status !== 'connected' || !transport || url?.startsWith('demo://')) return;
+    return observePostureStatus(transport);
+  }, [status, transport, url]);
   const sendCommand = useCallback((command: PostureCommand) => {
     void requestPosture(command).catch((error) => {
       Alert.alert(t('posture.failedTitle'), error instanceof Error ? error.message : String(error));

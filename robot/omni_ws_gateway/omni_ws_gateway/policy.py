@@ -86,6 +86,7 @@ DEFAULT_RULES: dict[str, RoleRule] = {
             "/omni/control/authority",
             "/omni/control/set_travel_speed",
             "/omni/recording/start",
+            "/omni/recording/start_selected",
             "/omni/recording/stop",
             "/omni/safety/arm_supervisor",
             "/omni/safety/reset_estop",

@@ -71,6 +71,7 @@ import { EmergencyStop } from './EmergencyStop';
 import { CockpitTelemetry } from './CockpitTelemetry';
 import { InspectionProgress } from './InspectionProgress';
 import { RecordingControl } from './RecordingControl';
+import { HarnessTestControl } from './HarnessTestControl';
 import { MappingControl } from './MappingControl';
 import { RouteRecordingControl } from './RouteRecordingControl';
 import { ControlAuthorityButton } from './ControlAuthority';
@@ -856,6 +857,15 @@ export function ControlCockpit({
         <View style={styles.dockRow}>
           <ControlAuthorityButton cockpit />
           <PostureControl cockpit />
+        </View>
+        <View style={styles.dockRow}>
+          <HarnessTestControl zh={zh} canStart={connected && !isDemo && authorityStatus === 'available' &&
+            !runtimeStale && runtime?.mode === AUTONOMY_MODE.IDLE && runtime.desired_mode === AUTONOMY_MODE.IDLE &&
+            runtime.phase === AUTONOMY_PHASE.IDLE && !runtime.mission_active &&
+            !missionStatusStale && Boolean(mission) && !missionActive &&
+            !robotStateStale && Boolean(robotStrip) && robotStrip?.estop_latched === false &&
+            !ACTIVE_MISSION_STATES.includes(robotStrip?.mission_state ?? MISSION_STATE.PENDING) &&
+            !navigationStale && Boolean(navigation) && !navigationKnownActive && !dispatching && !controlling} />
         </View>
         <View style={styles.dockRow}>
           <CockpitButton icon="navigate-circle-outline" label={missionActive ? missionStateLabel(missionState, zh) : (zh ? '巡检任务' : 'Inspection')}

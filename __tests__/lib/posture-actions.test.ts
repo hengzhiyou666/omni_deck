@@ -1,5 +1,5 @@
 jest.mock('../../hooks/useCmdVelPublisher', () => ({ stopAllTeleop: jest.fn() }));
-import { requestPosture, togglePostureStop, usePostureStore } from '../../lib/posture-actions';
+import { observePostureStatus, requestPosture, togglePostureStop, usePostureStore } from '../../lib/posture-actions';
 import { useRosStore } from '../../stores/useRosStore';
 import { useMissionStore } from '../../stores/useMissionStore';
 import { useControlAuthorityStore } from '../../stores/useControlAuthorityStore';
@@ -15,23 +15,31 @@ describe('shared posture and patrol transaction (mock transport, no robot)', () 
   let beforeLocoAck: (() => void) | undefined;
   let beforePostureAck: (() => void) | undefined;
   let failPosture: boolean;
+  let callbacks: Map<string, Set<(message: any) => void>>;
+  const receive = (topic: string, message: any) => {
+    for (const callback of [...callbacks.get(topic) ?? []]) callback(message);
+  };
   const mission = (state: number, id = 'patrol-1') => useMissionStore.setState({
     status: { state, mission_id: id } as any, missionStatusStale: false,
   });
   beforeEach(() => {
     events = []; beforeLocoAck = undefined; beforePostureAck = undefined; failPosture = false;
-    const callbacks = new Map<string, (message: any) => void>();
+    callbacks = new Map();
     transport = {
       getStatus: () => 'connected', connect: jest.fn(), disconnect: jest.fn(),
       onStatus: () => () => {},
-      subscribe: (topic, _type, cb) => { callbacks.set(topic, cb); return { unsubscribe: () => callbacks.delete(topic) }; },
+      subscribe: jest.fn((topic, _type, cb) => {
+        const subscribers = callbacks.get(topic) ?? new Set();
+        subscribers.add(cb); callbacks.set(topic, subscribers);
+        return { unsubscribe: () => subscribers.delete(cb) };
+      }),
       publish: (topic, _type, msg) => {
         if (topic === '/rosdeck/posture_command') {
           const command = msg.data.split(':')[0]; events.push(command); beforePostureAck?.();
-          callbacks.get('/rosdeck/posture_status')?.({ data: `${failPosture ? 'error' : 'success'}:${command}:test` });
+          receive('/rosdeck/posture_status', { data: `${failPosture ? 'error' : 'success'}:${command}:test` });
         } else if (topic === '/rosdeck/locomotion_command') {
           events.push('loco'); beforeLocoAck?.();
-          callbacks.get('/rosdeck/locomotion_status')?.({ data: 'success:loco' });
+          receive('/rosdeck/locomotion_status', { data: 'success:loco' });
         } else throw new Error(`Unexpected hardware topic ${topic}`);
       },
       getTopics: async () => [{ name: '/rosdeck/locomotion_status', type: 'std_msgs/msg/String' }],
@@ -110,4 +118,81 @@ describe('shared posture and patrol transaction (mock transport, no robot)', () 
     await expect(requestPosture('stand')).rejects.toThrow('Mission status is stale');
     expect(events).toEqual([]);
   });
+
+  it('syncs harness posture receipts without replaying old joystick input', () => {
+    const stop = observePostureStatus(transport);
+    try {
+      useCmdVelStore.getState().setAxes('/omni/control/teleop', { 'linear.x': 0.4 });
+      useCmdVelStore.getState().setPostureInhibited(true);
+      receive('/rosdeck/posture_status', { data: 'success:stand' });
+      expect(usePostureStore.getState().posture).toBe('standing');
+      expect(useCmdVelStore.getState().postureInhibited).toBe(false);
+      expect(useCmdVelStore.getState().topics['/omni/control/teleop']['linear.x']).toBe(0);
+      useCmdVelStore.getState().setAxes('/omni/control/teleop', { 'linear.x': 0.2 });
+      receive('/rosdeck/posture_status', { data: 'success:lie_down' });
+      expect(usePostureStore.getState().posture).toBe('lying');
+      expect(useCmdVelStore.getState().postureInhibited).toBe(true);
+      expect(useCmdVelStore.getState().topics['/omni/control/teleop']['linear.x']).toBe(0);
+      expect(events).toEqual([]);
+    } finally { stop(); }
+  });
+
+  it('keeps another cached control subscribed when one control unmounts', () => {
+    const first = observePostureStatus(transport);
+    const second = observePostureStatus(transport);
+    expect(transport.subscribe).toHaveBeenCalledTimes(2);
+    first();
+    receive('/rosdeck/posture_status', { data: 'success:stand' });
+    expect(usePostureStore.getState().posture).toBe('standing');
+    second();
+    receive('/rosdeck/posture_status', { data: 'success:lie_down' });
+    expect(usePostureStore.getState().posture).toBe('standing');
+    const next = observePostureStatus(transport);
+    expect(transport.subscribe).toHaveBeenCalledTimes(3);
+    next();
+  });
+
+  it.each(['error:stand:rejected', 'started:stand', 'success:unknown', 'success:loco'])(
+    'does not release the posture gate for %s', message => {
+      const stop = observePostureStatus(transport);
+      try {
+        usePostureStore.setState({ posture: 'lying' });
+        useCmdVelStore.getState().setPostureInhibited(true);
+        receive('/rosdeck/posture_status', { data: message });
+        expect(usePostureStore.getState().posture).toBe('lying');
+        expect(useCmdVelStore.getState().postureInhibited).toBe(true);
+      } finally { stop(); }
+    });
+
+  it('keeps a local stand transaction inhibited until its LOCO confirmation and patrol handling finish', async () => {
+    const stop = observePostureStatus(transport);
+    try {
+      mission(MISSION_STATE.EXECUTING);
+      await requestPosture('lieDown');
+      beforeLocoAck = () => {
+        expect(usePostureStore.getState().pending).toBe('stand');
+        expect(useCmdVelStore.getState().postureInhibited).toBe(true);
+      };
+      await requestPosture('stand');
+      expect(events).toEqual(['pause', 'lie_down', 'stand', 'loco', 'resume']);
+      expect(useCmdVelStore.getState().postureInhibited).toBe(false);
+    } finally { stop(); }
+  });
+
+  it.each(['replacement', 'disconnected', 'transport_closed'])(
+    'ignores receipts after %s', change => {
+      const stop = observePostureStatus(transport);
+      try {
+        if (change === 'replacement') useRosStore.setState({ transport: { ...transport } });
+        if (change === 'disconnected') useRosStore.setState({
+          connection: { ...useRosStore.getState().connection, status: 'disconnected' },
+        });
+        if (change === 'transport_closed') transport.getStatus = () => 'disconnected';
+        usePostureStore.setState({ posture: 'lying' });
+        useCmdVelStore.getState().setPostureInhibited(true);
+        receive('/rosdeck/posture_status', { data: 'success:stand' });
+        expect(usePostureStore.getState().posture).toBe('lying');
+        expect(useCmdVelStore.getState().postureInhibited).toBe(true);
+      } finally { stop(); }
+    });
 });

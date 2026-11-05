@@ -18,7 +18,7 @@ describe('ControlCockpit inspection entry', () => {
   it('derives the active patrol presentation from MissionStatus only', () => {
     expect(source).toContain('ACTIVE_MISSION_STATES.includes(missionState)');
     expect(source).toContain('active={missionActive}');
-    expect(source).not.toContain('mission_active');
+    expect(source).toMatch(/const missionActive = !missionStatusStale &&\s*ACTIVE_MISSION_STATES.includes\(missionState\)/);
   });
 
   it('applies the same route and robot safety gates as the mission page', () => {

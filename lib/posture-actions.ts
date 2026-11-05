@@ -30,6 +30,21 @@ export const usePostureStore = create<{
   pausedMission: string | null; error: string | null;
 }>(() => ({ posture: 'unknown', pending: null, pausedMission: null, error: null }));
 
+export function observePostureStatus(transport: Transport): () => void {
+  const subscription = transport.subscribe(POSTURE_STATUS_TOPIC, POSTURE_MESSAGE_TYPE, (message) => {
+    const robot = useRosStore.getState();
+    const status = parsePostureStatus(message);
+    if (robot.transport !== transport || robot.connection.status !== 'connected' ||
+      transport.getStatus() !== 'connected' || usePostureStore.getState().pending !== null ||
+      status?.result !== 'success' || !['stand', 'lie_down'].includes(status.command)) return;
+    const lying = status.command === 'lie_down';
+    useCmdVelStore.getState().clearAll();
+    useCmdVelStore.getState().setPostureInhibited(lying);
+    usePostureStore.setState({ posture: lying ? 'lying' : 'standing' });
+  });
+  return () => subscription.unsubscribe();
+}
+
 let session = 0;
 useRosStore.subscribe((current, previous) => {
   if (current.transport !== previous.transport || current.connection.status !== previous.connection.status) {
