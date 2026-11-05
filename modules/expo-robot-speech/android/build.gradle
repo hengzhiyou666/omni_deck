@@ -18,14 +18,13 @@ android {
 dependencies {
   implementation project(':expo-modules-core')
   implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${safeExtGet('kotlinVersion', '1.9.0')}"
-  implementation 'com.alphacephei:vosk-android:0.3.75@aar'
-  implementation 'net.java.dev.jna:jna:5.18.1@aar'
+  implementation files('libs/sherpa-onnx-2.0.1.aar')
 }
 
 tasks.named('preBuild') {
   doFirst {
-    if (!file('src/main/assets/model-cn/am/final.mdl').isFile() || !file('src/main/assets/model-cn/uuid').isFile()) {
-      throw new GradleException('Missing Chinese speech model. From omni_deck run: python3 scripts/prepare-speech-model.py <vosk-model-small-cn-0.22.zip>')
+    if (!file('libs/sherpa-onnx-2.0.1.aar').isFile() || !file('src/main/assets/speech/model.int8.onnx').isFile() || !file('src/main/assets/speech/tokens.txt').isFile() || !file('src/main/assets/speech/silero_vad.onnx').isFile()) {
+      throw new GradleException('Missing speech assets. From omni_deck run: python3 scripts/prepare-speech-model.py <sensevoice-int8.tar.bz2> <sherpa-onnx-static-link-onnxruntime-2.0.1.aar> <silero_vad.onnx>')
     }
   }
 }

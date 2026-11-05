@@ -1,9 +1,15 @@
 import { PermissionsAndroid, Platform } from 'react-native';
-import { robotSpeech as speech } from '../modules/expo-robot-speech/src';
+import { robotSpeech as speech, type RobotSpeechState } from '../modules/expo-robot-speech/src';
+
+export type { RobotSpeechState } from '../modules/expo-robot-speech/src';
 
 let attempt = 0;
 
-export async function recognizeRobotCommand(): Promise<string | null> {
+export async function prepareRobotCommandRecognition(): Promise<void> {
+  if (Platform.OS === 'android') await speech?.prepare();
+}
+
+export async function recognizeRobotCommand(onState?: (state: RobotSpeechState) => void): Promise<string | null> {
   if (Platform.OS !== 'android' || !speech) {
     throw new Error('请安装支持语音输入的 Android APK');
   }
@@ -13,7 +19,14 @@ export async function recognizeRobotCommand(): Promise<string | null> {
   if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
     throw new Error('请允许麦克风权限以识别语音');
   }
-  return speech.recognize();
+  const subscription = speech.addListener('onStateChanged', event => {
+    if (current === attempt) onState?.(event.state);
+  });
+  try {
+    const text = await speech.recognize();
+    return current === attempt ? text : null;
+  }
+  finally { subscription.remove(); }
 }
 
 export async function cancelRobotCommandRecognition(): Promise<void> {

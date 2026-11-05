@@ -7,7 +7,8 @@ import { useRosStore } from '../stores/useRosStore';
 import { generateAutonomyRequestId } from '../lib/autonomy-runtime';
 import { cancelHarnessTest, HARNESS_MESSAGE_TYPE, HARNESS_STATUS_TOPIC, HARNESS_TEST_PROMPT,
   parseHarnessStatus, requestHarnessTask, type HarnessStatus } from '../lib/harness';
-import { cancelRobotCommandRecognition, recognizeRobotCommand } from '../lib/robot-speech';
+import { cancelRobotCommandRecognition, prepareRobotCommandRecognition, recognizeRobotCommand,
+  type RobotSpeechState } from '../lib/robot-speech';
 
 export function HarnessTestControl({ zh, canStart }: { zh: boolean; canStart: boolean }) {
   const { theme, styles } = useThemeStyles(createStyles);
@@ -21,6 +22,7 @@ export function HarnessTestControl({ zh, canStart }: { zh: boolean; canStart: bo
   const [prompt, setPrompt] = useState('');
   const [speechText, setSpeechText] = useState('');
   const [listening, setListening] = useState(false);
+  const [speechState, setSpeechState] = useState<RobotSpeechState>('preparing');
   const request = useRef('');
   const busy = useRef(false);
   const cancelBusy = useRef(false);
@@ -32,6 +34,7 @@ export function HarnessTestControl({ zh, canStart }: { zh: boolean; canStart: bo
 
   useEffect(() => {
     mounted.current = true;
+    void prepareRobotCommandRecognition().catch(() => {});
     return () => { mounted.current = false; };
   }, []);
 
@@ -127,10 +130,12 @@ export function HarnessTestControl({ zh, canStart }: { zh: boolean; canStart: bo
     }
     if (!readyToSubmit()) return;
     const currentSession = session.current;
-    voiceBusy.current = true; setListening(true); setSpeechText('');
+    voiceBusy.current = true; setListening(true); setSpeechState('preparing'); setSpeechText('');
     Keyboard.dismiss();
     try {
-      const text = await recognizeRobotCommand();
+      const text = await recognizeRobotCommand(state => {
+        if (mounted.current && session.current === currentSession) setSpeechState(state);
+      });
       if (!mounted.current) return;
       if (text !== null) setSpeechText(text);
       if (session.current !== currentSession) return;
@@ -150,6 +155,10 @@ export function HarnessTestControl({ zh, canStart }: { zh: boolean; canStart: bo
   const detail = !fresh && pending ? (zh ? '状态中断，任务结果未知；不会自动重发' : 'Status lost; outcome unknown. No automatic retry.')
     : !canStart && !pending && !running && !cancelling ? (zh ? '需机器狗空闲，并释放手机控制权' : 'Robot must be idle with phone control released')
     : running ? steps[status?.step ?? ''] || status?.message : status?.message || outcome;
+  const speechHint = !listening ? (zh ? '语音识别完成后自动执行' : 'Voice commands run after recognition')
+    : speechState === 'preparing' ? (zh ? '正在准备语音，请稍候' : 'Preparing voice input')
+    : speechState === 'listening' ? (zh ? '请说话，说完后稍作停顿' : 'Speak now, then pause briefly')
+    : (zh ? '正在识别语音' : 'Recognizing speech');
 
   return <View style={styles.container}>
     <View style={styles.row}>
@@ -178,7 +187,7 @@ export function HarnessTestControl({ zh, canStart }: { zh: boolean; canStart: bo
         <Text style={styles.text}>{listening ? (zh ? '取消语音' : 'Cancel voice') : (zh ? '语音' : 'Voice')}</Text>
       </TouchableOpacity>
     </View>
-    <Text style={styles.detail}>{zh ? '语音识别完成后自动执行' : 'Voice commands run after recognition'}</Text>
+    <Text accessibilityLabel={zh ? '语音状态' : 'Voice status'} style={styles.detail}>{speechHint}</Text>
     {detail ? <Text numberOfLines={2} style={styles.detail}>{detail}</Text> : null}
   </View>;
 }

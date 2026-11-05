@@ -5,6 +5,7 @@ jest.mock('react-native', () => ({
 }));
 jest.mock('../../lib/robot-speech', () => ({
   recognizeRobotCommand: jest.fn(), cancelRobotCommandRecognition: jest.fn(async () => {}),
+  prepareRobotCommandRecognition: jest.fn(async () => {}),
 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
 jest.mock('../../hooks/useAppTheme', () => ({ useThemeStyles: (factory: any) => {
@@ -21,7 +22,7 @@ import { Alert } from 'react-native';
 import { HarnessTestControl } from '../../components/HarnessTestControl';
 import { useRosStore } from '../../stores/useRosStore';
 import type { Transport } from '../../lib/transport';
-import { cancelRobotCommandRecognition, recognizeRobotCommand } from '../../lib/robot-speech';
+import { cancelRobotCommandRecognition, prepareRobotCommandRecognition, recognizeRobotCommand } from '../../lib/robot-speech';
 const { act, create } = require('react-test-renderer');
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -123,15 +124,36 @@ test('displays only the final voice result and sends it once through the same ta
     .toBe('站起来，向前走1m，然后卧下');
 });
 
+test('prepares on mount and shows when the microphone is actually ready and recognition starts', async () => {
+  expect(prepareRobotCommandRecognition).toHaveBeenCalledTimes(1);
+  expect(recognizeRobotCommand).not.toHaveBeenCalled();
+  let finish!: (text: string | null) => void;
+  (recognizeRobotCommand as jest.Mock).mockReturnValueOnce(new Promise<string | null>(resolve => { finish = resolve; }));
+  await act(async () => { status('idle'); });
+  await act(async () => { void labelled('语音输入').props.onPress(); });
+  const updateState = (recognizeRobotCommand as jest.Mock).mock.calls[0][0];
+  expect(labelled('语音状态').props.children).toBe('正在准备语音，请稍候');
+  await act(async () => { updateState('listening'); });
+  expect(labelled('语音状态').props.children).toBe('请说话，说完后稍作停顿');
+  await act(async () => { updateState('recognizing'); });
+  expect(labelled('语音状态').props.children).toBe('正在识别语音');
+  expect(labelled('取消语音').props.disabled).toBe(false);
+  expect(transport.publish).not.toHaveBeenCalled();
+  await act(async () => { finish(null); });
+  expect(labelled('语音状态').props.children).toBe('语音识别完成后自动执行');
+});
+
 test('cancels recording and ignores a late final result without sending a task', async () => {
   let finish!: (text: string) => void;
   (recognizeRobotCommand as jest.Mock).mockReturnValueOnce(new Promise<string>(resolve => { finish = resolve; }));
   await act(async () => { status('idle'); });
   await act(async () => { void labelled('语音输入').props.onPress(); });
+  const updateState = (recognizeRobotCommand as jest.Mock).mock.calls[0][0];
   await act(async () => { await labelled('取消语音').props.onPress(); });
   expect(cancelRobotCommandRecognition).toHaveBeenCalledTimes(1);
   expect(labelled('语音输入').props.disabled).toBe(false);
-  await act(async () => { finish('站起来'); });
+  await act(async () => { updateState('listening'); finish('站起来'); });
+  expect(labelled('语音状态').props.children).toBe('语音识别完成后自动执行');
   expect(transport.publish).not.toHaveBeenCalled();
 });
 

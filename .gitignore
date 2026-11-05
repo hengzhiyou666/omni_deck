@@ -77,3 +77,5 @@ assets/images/icon-candidates
 
 # Prepared offline speech weights; regenerate with scripts/prepare-speech-model.py.
 /modules/expo-robot-speech/android/src/main/assets/model-cn/
+/modules/expo-robot-speech/android/src/main/assets/speech/
+/modules/expo-robot-speech/android/libs/*.aar
