@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -49,7 +51,8 @@ function phaseIsTransitioning(phase: number): boolean {
  * 路线录制只提交 Mission 意图。地图绑定、录制状态和原子落盘均由机器人端
  * 负责，APP 仅根据权威快照展示点数、距离与未保存状态。
  */
-export function RouteRecordingControl() {
+export function RouteRecordingControl({ cockpit = false }: { cockpit?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -70,13 +73,13 @@ export function RouteRecordingControl() {
 
   const phase = runtime?.phase ?? AUTONOMY_PHASE.IDLE;
   const synchronized = runtime !== null && !runtimeStale;
+  const mapping = runtime?.mode === AUTONOMY_MODE.MAPPING;
   const recording = runtime?.mode === AUTONOMY_MODE.ROUTE_RECORDING;
   const recordingStarting = runtime?.desired_mode === AUTONOMY_MODE.ROUTE_RECORDING &&
     phaseIsTransitioning(phase);
   // Manager 在 STARTING 前就发布稳定的 recording_operation_id。首个里程计
   // 尚未到达时也必须显示“结束录制”，否则用户会被困在启动等待阶段。
-  const recordingSessionActive = Boolean(recordingOperationId) &&
-    (recording || recordingStarting || phase === AUTONOMY_PHASE.ERROR);
+  const recordingSessionActive = Boolean(recordingOperationId);
   const recordingFinishable = recordingSessionActive &&
     phase !== AUTONOMY_PHASE.STOPPING && phase !== AUTONOMY_PHASE.CONFLICT;
   const runtimeFault = phase === AUTONOMY_PHASE.ERROR || phase === AUTONOMY_PHASE.CONFLICT;
@@ -94,7 +97,7 @@ export function RouteRecordingControl() {
   }, [runtime?.map_checksum, runtime?.map_id, runtime?.map_version]);
   const routeIdValid = ROUTE_ID_PATTERN.test(routeId.trim());
   const canStart = connected && synchronized && !phaseIsTransitioning(phase) &&
-    !runtimeFault && !recording && !missionActive && !navigationActive;
+    !runtimeFault && !recordingSessionActive && !recording && !missionActive && !navigationActive;
   const canFinish = connected && synchronized && recordingFinishable &&
     Boolean(recordingOperationId);
   const commandPending = pendingCommand?.kind === 'finish_route_recording' ||
@@ -109,11 +112,12 @@ export function RouteRecordingControl() {
   }, [currentMapIdentity, selectedMap, setupOpen, t]);
 
   const openSetup = useCallback(() => {
+    if (mapping) { setSelectedMap(null); setSetupOpen(true); return; }
     // 每次新建录制会话都查询机器人目录。runtime 身份只用于预选，不能跳过
     // 目录刷新，否则 current 指针变化后手机会继续使用旧版本。
     setSelectedMap(null);
     setMapPickerOpen(true);
-  }, []);
+  }, [mapping]);
 
   const closeSetup = useCallback(() => {
     setSetupOpen(false);
@@ -131,7 +135,7 @@ export function RouteRecordingControl() {
     const normalizedRouteId = routeId.trim();
     if (!transport || !runtimeStore.status || runtimeStore.stale ||
         !ROUTE_ID_PATTERN.test(normalizedRouteId)) return;
-    if (!isCompleteMapIdentity(selectedMap)) {
+    if (!mapping && !isCompleteMapIdentity(selectedMap)) {
       Alert.alert(t('routeRecording.failedTitle'), t('routeRecording.mapMissing'));
       return;
     }
@@ -143,9 +147,10 @@ export function RouteRecordingControl() {
     try {
       const response = await setAutonomyMode(transport, {
         desiredMode: AUTONOMY_MODE.ROUTE_RECORDING,
-        mapId: selectedMap.mapId,
-        mapVersion: selectedMap.mapVersion,
-        mapChecksum: selectedMap.mapChecksum,
+        mapId: mapping ? undefined : selectedMap!.mapId,
+        mapVersion: mapping ? undefined : selectedMap!.mapVersion,
+        mapChecksum: mapping ? undefined : selectedMap!.mapChecksum,
+        mappingSessionId: mapping ? `${runtimeStore.status.manager_epoch}:${runtimeStore.status.runtime_generation}` : undefined,
         routeId: normalizedRouteId,
       });
       useAutonomyRuntimeStore.getState().completeCommand(response);
@@ -165,7 +170,7 @@ export function RouteRecordingControl() {
       useAutonomyRuntimeStore.getState().failCommand(message);
       Alert.alert(t('routeRecording.failedTitle'), message);
     }
-  }, [routeId, selectedMap, t, transport]);
+  }, [mapping, routeId, selectedMap, t, transport]);
 
   const requestFinish = useCallback(async (disposition: RouteRecordingDisposition) => {
     const runtimeStore = useAutonomyRuntimeStore.getState();
@@ -214,7 +219,8 @@ export function RouteRecordingControl() {
   }, [requestFinish, runtime?.route_has_unsaved_data, t]);
 
   const disabled = commandPending || (!canStart && !canFinish);
-  const label = recordingFinishable
+  const waitingForMap = mapping && runtime?.route_recording_state === 3;
+  const label = waitingForMap ? '路线已暂停录制，等待保存地图' : recordingFinishable
     ? t('routeRecording.recording', { count: runtime?.route_point_count ?? 0 })
     : recordingStarting || commandPending
       ? t('routeRecording.starting')
@@ -222,7 +228,7 @@ export function RouteRecordingControl() {
 
   return (
     <>
-      <View style={styles.controlBlock}>
+      <View style={[styles.controlBlock, cockpit && { minWidth: 0 }]}>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel={label}
@@ -231,6 +237,7 @@ export function RouteRecordingControl() {
           activeOpacity={0.75}
           style={[
             styles.button,
+            cockpit && { paddingHorizontal: 8, minHeight: 40 },
             recordingFinishable && styles.recordingButton,
             disabled && styles.disabled,
           ]}
@@ -240,16 +247,16 @@ export function RouteRecordingControl() {
             size={17}
             color={recordingFinishable ? theme.colors.statusError : theme.colors.accentPrimary}
           />
-          <Text style={[styles.buttonText, recordingFinishable && styles.recordingText]}>{label}</Text>
+          <Text style={[styles.buttonText, cockpit && { fontSize: 10 }, recordingFinishable && styles.recordingText]}>{label}</Text>
         </TouchableOpacity>
-        {recordingSessionActive ? (
+        {!cockpit && recordingSessionActive ? (
           <Text style={styles.assetText} numberOfLines={1}>
             {t('routeRecording.activeRoute', { route: runtime?.route_id || routeId })}
           </Text>
         ) : null}
-        <Text style={styles.assetText} numberOfLines={1}>
+        {!cockpit && <Text style={styles.assetText} numberOfLines={1}>
           {t('routeRecording.boundMap', { map: mapLabel })}
-        </Text>
+        </Text>}
         {recordingSessionActive ? (
           <Text style={runtime?.route_has_unsaved_data ? styles.unsavedText : styles.assetText}>
             {runtime?.route_has_unsaved_data
@@ -275,7 +282,7 @@ export function RouteRecordingControl() {
               showsVerticalScrollIndicator
             >
               <Text style={styles.dialogTitle}>{t('routeRecording.setupTitle')}</Text>
-              <View style={styles.mapSelection}>
+              {mapping ? <Text style={styles.dialogHint}>边建图边录路线；保存地图后，路线按回环优化后的坐标同步保存。</Text> : <View style={styles.mapSelection}>
                 <View style={styles.mapSelectionBody}>
                   <Text style={styles.fieldLabel}>{t('mapCatalog.selectedMap')}</Text>
                   <Text style={styles.mapSelectionValue} numberOfLines={1}>{mapLabel}</Text>
@@ -292,7 +299,7 @@ export function RouteRecordingControl() {
                 >
                   <Text style={styles.changeMapText}>{t('mapCatalog.change')}</Text>
                 </TouchableOpacity>
-              </View>
+              </View>}
               <Text style={styles.fieldLabel}>{t('routeRecording.routeId')}</Text>
               <TextInput
                 autoCapitalize="none"
@@ -315,10 +322,10 @@ export function RouteRecordingControl() {
                   <Text style={styles.secondaryButtonText}>{t('routeRecording.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  disabled={!routeIdValid || !canStart || !isCompleteMapIdentity(selectedMap)}
+                  disabled={!routeIdValid || !canStart || (!mapping && !isCompleteMapIdentity(selectedMap))}
                   style={[
                     styles.primaryButton,
-                    (!routeIdValid || !canStart || !isCompleteMapIdentity(selectedMap)) &&
+                    (!routeIdValid || !canStart || (!mapping && !isCompleteMapIdentity(selectedMap))) &&
                       styles.disabled,
                   ]}
                   onPress={() => void requestStart()}
@@ -345,7 +352,7 @@ export function RouteRecordingControl() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   controlBlock: { flex: 1, minWidth: 190, gap: 4 },
   button: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 14, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.accentPrimary + '66', backgroundColor: theme.colors.accentPrimary + '11' },
   recordingButton: { borderColor: theme.colors.statusError + '88', backgroundColor: theme.colors.statusErrorGlow },
@@ -373,5 +380,5 @@ const styles = StyleSheet.create({
   secondaryButton: { minHeight: 42, minWidth: 90, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: theme.colors.borderDefault },
   secondaryButtonText: { color: theme.colors.textSecondary, fontWeight: '700' },
   primaryButton: { minHeight: 42, minWidth: 120, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: theme.colors.accentPrimary },
-  primaryButtonText: { color: '#061014', fontWeight: '800' },
+  primaryButtonText: { color: theme.colors.onAccent, fontWeight: '800' },
 });

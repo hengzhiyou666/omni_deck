@@ -1,0 +1,34 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'expo.modules.robotspeech'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.robotspeech"
+  compileSdkVersion safeExtGet("compileSdkVersion", 34)
+
+  defaultConfig {
+    minSdkVersion safeExtGet("minSdkVersion", 23)
+    targetSdkVersion safeExtGet("targetSdkVersion", 34)
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${safeExtGet('kotlinVersion', '1.9.0')}"
+  implementation files('libs/sherpa-onnx-2.0.1.aar')
+}
+
+tasks.named('preBuild') {
+  doFirst {
+    if (!file('libs/sherpa-onnx-2.0.1.aar').isFile() || !file('src/main/assets/speech/model.int8.onnx').isFile() || !file('src/main/assets/speech/tokens.txt').isFile() || !file('src/main/assets/speech/silero_vad.onnx').isFile()) {
+      throw new GradleException('Missing speech assets. From omni_deck run: python3 scripts/prepare-speech-model.py <sensevoice-int8.tar.bz2> <sherpa-onnx-static-link-onnxruntime-2.0.1.aar> <silero_vad.onnx>')
+    }
+  }
+}
+
+def safeExtGet(prop, fallback) {
+  rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}

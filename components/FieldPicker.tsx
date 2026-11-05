@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,6 +45,7 @@ export function getFieldValue(obj: any, path: string): number | undefined {
 }
 
 export function FieldPicker({ topic, value, onSelect }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const status = useRosStore((s) => s.connection.status);
   const maxDepth = useSettingsStore((s) => s.fieldPickerDepth);
@@ -181,7 +184,7 @@ export function FieldPicker({ topic, value, onSelect }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   collapsed: {
     flexDirection: 'row',
     justifyContent: 'space-between',

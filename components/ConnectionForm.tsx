@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useState, useRef, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +12,7 @@ import type { TransportType } from '../lib/transport';
 import { useTranslation } from '../lib/i18n';
 
 export function ConnectionForm() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const { t } = useTranslation();
   const [ipPort, setIpPort] = useState('');
   const [detecting, setDetecting] = useState(false);
@@ -214,7 +217,7 @@ export function ConnectionForm() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { padding: 18 },
   label: {
     fontSize: 13,

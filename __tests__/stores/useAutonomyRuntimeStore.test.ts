@@ -218,3 +218,18 @@ describe('useAutonomyRuntimeStore command serialization', () => {
       .toBe('finish-route-1');
   });
 });
+
+
+it('completes recording admission while remaining in mapping and retains explicit failures', () => {
+  const store = useAutonomyRuntimeStore.getState();
+  store.beginCommand({ kind: 'set_mode', desiredMode: AUTONOMY_MODE.ROUTE_RECORDING });
+  store.completeCommand({ accepted: true, operation_id: 'record-1', reason_code: 0,
+    reason_text: '', runtime_generation: 1 });
+  store.onStatus(runtimeStatus({ mode: AUTONOMY_MODE.MAPPING, phase: AUTONOMY_PHASE.READY,
+    operation_id: 'record-1', recording_operation_id: 'record-1', route_recording_state: 2 }));
+  expect(useAutonomyRuntimeStore.getState().pendingCommand).toBeNull();
+  store.onStatus(runtimeStatus({ status_sequence: 2, route_recording_state: 4,
+    recording_operation_id: 'record-1', reason_text: 'map saved; route save failed' }));
+  store.onStatus(runtimeStatus({ status_sequence: 3 }));
+  expect(useAutonomyRuntimeStore.getState().lastError).toBe('map saved; route save failed');
+});

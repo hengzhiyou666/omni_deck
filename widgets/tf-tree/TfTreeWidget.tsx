@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRosStore } from '../../stores/useRosStore';
@@ -56,6 +58,7 @@ function countFrames(parentToChildren: Map<string, Set<string>>): number {
 }
 
 function TreeNodeView({ node, depth, textScale }: { node: TreeNode; depth: number; textScale: number }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const sz = 12 * textScale;
   const lh = sz * 1.5;
   return (
@@ -72,6 +75,7 @@ function TreeNodeView({ node, depth, textScale }: { node: TreeNode; depth: numbe
 }
 
 export function TfTreeWidget(props: Partial<WidgetProps>) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const status = useRosStore((s) => s.connection.status);
   const parentToChildrenRef = useRef<Map<string, Set<string>>>(new Map());
@@ -158,7 +162,7 @@ export function TfTreeWidget(props: Partial<WidgetProps>) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     backgroundColor: theme.colors.bgBase,
     flex: 1,

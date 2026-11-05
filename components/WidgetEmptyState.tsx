@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -72,6 +74,7 @@ export function WidgetEmptyState({
   topicName,
   hint: hintOverride,
 }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const [showGuide, setShowGuide] = useState(false);
   const language = useSettingsStore((s) => s.language);
   const help = WIDGET_HELP[widgetType] ?? {
@@ -106,7 +109,7 @@ export function WidgetEmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "center",

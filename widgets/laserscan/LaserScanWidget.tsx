@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Canvas, Points, vec } from '@shopify/react-native-skia';
@@ -8,6 +10,7 @@ import type { WidgetProps } from '../../types/layout';
 import { WidgetEmptyState } from '../../components/WidgetEmptyState';
 
 export function LaserScanWidget(props: Partial<WidgetProps>) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const status = useRosStore((s) => s.connection.status);
   const topic = props?.config?.topic || '/scan';
@@ -77,7 +80,7 @@ export function LaserScanWidget(props: Partial<WidgetProps>) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { backgroundColor: '#000', overflow: 'hidden' },
   placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   placeholderText: { fontFamily: 'SpaceMono', fontSize: 12, color: theme.colors.textMuted },

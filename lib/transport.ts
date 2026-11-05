@@ -31,4 +31,4 @@ export interface Transport {
   getStatus(): TransportStatus;
 }
 
-export type TransportType = 'rosbridge' | 'foxglove' | 'demo';
+export type TransportType = 'rosbridge' | 'foxglove' | 'demo' | 'ble';

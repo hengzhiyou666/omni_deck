@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 // components/WidgetPicker.tsx
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
@@ -14,6 +16,7 @@ interface Props {
 }
 
 export function WidgetPicker({ visible, onSelect, onClose }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const widgets = Object.values(WIDGET_REGISTRY);
   const { isLandscape } = useOrientation();
 
@@ -61,7 +64,7 @@ export function WidgetPicker({ visible, onSelect, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: '#00000088',

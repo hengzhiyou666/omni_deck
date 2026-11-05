@@ -155,6 +155,11 @@ string reason`,
     response: `bool success
 string message`,
   },
+  'omni_robot_interfaces/srv/StartBagRecording': {
+    request: 'string[] topics',
+    response: `bool success
+string message`,
+  },
   'function_msgs/srv/SetRunMode': {
     request: `uint8 target_state
 uint8 mode

@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -17,13 +19,13 @@ import { useSettingsStore } from '../stores/useSettingsStore';
 type IconName = keyof typeof Ionicons.glyphMap;
 type Tone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger';
 
-const toneColors: Record<Tone, string> = {
+const getToneColors = (theme: AppTheme): Record<Tone, string> => ({
   neutral: theme.colors.textSecondary,
   primary: theme.colors.accentPrimary,
   success: theme.colors.statusConnected,
   warning: theme.colors.statusConnecting,
   danger: theme.colors.statusError,
-};
+});
 
 export function StatusPill({
   label,
@@ -34,7 +36,8 @@ export function StatusPill({
   tone?: Tone;
   icon?: IconName;
 }) {
-  const color = toneColors[tone];
+  const { theme, styles } = useThemeStyles(createStyles);
+  const color = getToneColors(theme)[tone];
   return (
     <View style={[styles.pill, { borderColor: color + '4D', backgroundColor: color + '14' }]}>
       {icon ? <Ionicons name={icon} size={13} color={color} /> : <View style={[styles.pillDot, { backgroundColor: color }]} />}
@@ -54,6 +57,7 @@ export function ProductHeader({
   showAlerts?: boolean;
   trailing?: React.ReactNode;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const language = useSettingsStore((s) => s.language);
   const status = useRosStore((s) => s.connection.status);
@@ -107,6 +111,7 @@ export function SectionHeader({
   actionLabel?: string;
   onAction?: () => void;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -128,6 +133,7 @@ export function ProductCard({
   style?: StyleProp<ViewStyle>;
   emphasized?: boolean;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return <View style={[styles.card, emphasized && styles.cardEmphasized, style]}>{children}</View>;
 }
 
@@ -142,7 +148,8 @@ export function Metric({
   value: string;
   tone?: Tone;
 }) {
-  const color = tone === 'neutral' ? theme.colors.textSecondary : toneColors[tone];
+  const { theme, styles } = useThemeStyles(createStyles);
+  const color = tone === 'neutral' ? theme.colors.textSecondary : getToneColors(theme)[tone];
   return (
     <View style={styles.metric}>
       <Ionicons name={icon} size={18} color={color} />
@@ -171,6 +178,7 @@ export function ProductButton({
   loading?: boolean;
   compact?: boolean;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const foreground = variant === 'primary'
     ? theme.colors.bgBase
     : variant === 'danger'
@@ -214,7 +222,8 @@ export function InlineNotice({
   actionLabel?: string;
   onAction?: () => void;
 }) {
-  const color = toneColors[tone];
+  const { theme, styles } = useThemeStyles(createStyles);
+  const color = getToneColors(theme)[tone];
   const icon: IconName = tone === 'danger' ? 'alert-circle' : tone === 'warning' ? 'warning' : tone === 'success' ? 'checkmark-circle' : 'information-circle';
   return (
     <View style={[styles.notice, { borderLeftColor: color }]}>
@@ -245,6 +254,7 @@ export function EmptyState({
   actionLabel?: string;
   onAction?: () => void;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <View style={styles.empty}>
       <View style={styles.emptyIcon}><Ionicons name={icon} size={28} color={theme.colors.textMuted} /></View>
@@ -255,7 +265,7 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   header: {
     minHeight: theme.sizes.appBar,
     flexDirection: 'row',
@@ -268,7 +278,7 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderSubtle,
   },
   headerCopy: { flex: 1, minWidth: 0 },
-  headerTitle: { ...theme.typography.headingLg, color: theme.colors.textPrimary },
+  headerTitle: { ...theme.typography.headingLg, fontSize: 20, color: theme.colors.textPrimary },
   headerSubtitle: { ...theme.typography.bodySm, color: theme.colors.textMuted, marginTop: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   iconButton: {
@@ -331,7 +341,7 @@ const styles = StyleSheet.create({
   buttonDanger: { backgroundColor: theme.colors.statusErrorGlow, borderColor: theme.colors.statusError + '66' },
   buttonGhost: { backgroundColor: 'transparent', borderColor: 'transparent' },
   buttonDisabled: { opacity: 0.4 },
-  buttonText: { fontSize: 14, fontWeight: '700' },
+  buttonText: { fontSize: 13, fontWeight: '700' },
   notice: {
     flexDirection: 'row',
     alignItems: 'center',

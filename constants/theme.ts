@@ -1,14 +1,8 @@
-/**
- * OmniDeck product design tokens.
- *
- * The interface is deliberately dark for field operation, but it avoids pure
- * black, neon glows and hairline controls.  Existing widgets still consume the
- * legacy token names below, so the visual refresh can be rolled out without
- * touching any ROS or control code.
- */
+/** Shared theme tokens. Control logic is independent of appearance. */
 
-export const theme = {
+const darkTheme = {
   colors: {
+    onAccent: '#071015',
     bgBase: '#071015',
     bgElevated: '#0D181E',
     bgSurface: '#132129',
@@ -90,3 +84,17 @@ export const theme = {
     error: '#EF4444',
   } as Record<string, string>,
 } as const;
+
+export type AppTheme = Omit<typeof darkTheme, 'colors'> & { colors: { [K in keyof typeof darkTheme.colors]: string } };
+export const lightTheme: AppTheme = { ...darkTheme, colors: {
+  ...darkTheme.colors, onAccent: '#FFFFFF', bgBase: '#F3F5F7', bgElevated: '#FFFFFF', bgSurface: '#EAF0F3', bgInset: '#F7F9FA',
+  borderSubtle: '#E0E7EB', borderDefault: '#CBD7DE', borderFocus: '#167D91',
+  accentPrimary: '#167D91', accentPrimaryPressed: '#116779', accentPrimaryMuted: '#167D9114',
+  statusConnected: '#188257', statusConnectedGlow: '#18825718', statusConnecting: '#98600C', statusConnectingGlow: '#98600C18',
+  statusError: '#C63C46', statusErrorGlow: '#C63C4618', statusDisconnected: '#637480', statusDisconnectedGlow: '#63748018',
+  textPrimary: '#172B35', textSecondary: '#465F6D', textMuted: '#627985', textValue: '#203C4B',
+  overlayLight: '#172B3508', overlayMedium: '#172B3512',
+} };
+export const themes: Record<'light' | 'dark', AppTheme> = { light: lightTheme, dark: darkTheme };
+// Non-reactive utilities use the default palette; UI components use useAppTheme.
+export const theme = lightTheme;

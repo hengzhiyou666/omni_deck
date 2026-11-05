@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { TextScaleControls } from "../../components/TextScaleControls";
@@ -31,6 +33,7 @@ function getLevelLabel(level: number): string {
 }
 
 export function DiagnosticsWidget(props: Partial<WidgetProps>) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const status = useRosStore((s) => s.connection.status);
   const topic = props?.config?.topic || "/diagnostics";
@@ -141,7 +144,7 @@ export function DiagnosticsWidget(props: Partial<WidgetProps>) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { backgroundColor: theme.colors.bgBase, overflow: "hidden" },
   header: {
     backgroundColor: theme.colors.bgBase,

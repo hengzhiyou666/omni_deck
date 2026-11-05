@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useNavigationState } from "@react-navigation/native";
@@ -34,6 +36,7 @@ export function CustomTabBar({
   descriptors,
   navigation,
 }: BottomTabBarProps) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((s) => s.connection.status);
   const isConnected = connectionStatus === "connected";
   const insets = useSafeAreaInsets();
@@ -108,6 +111,7 @@ export function CustomTabBar({
  * Landscape side rail — rendered as a sibling to Tabs in _layout.tsx
  */
 export function LandscapeTabRail() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((s) => s.connection.status);
   const isConnected = connectionStatus === "connected";
   const insets = useSafeAreaInsets();
@@ -200,7 +204,7 @@ export function LandscapeTabRail() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   // Portrait bottom bar
   container: {
     backgroundColor: theme.colors.bgBase,

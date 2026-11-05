@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { theme } from '../constants/theme';
@@ -26,6 +28,7 @@ export function TravelSpeedSession() {
 }
 
 export function TravelSpeedControl() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const { speed, known, pending, error } = useTravelSpeedStore();
   const transport = useRosStore((s) => s.transport);
   const connected = useRosStore((s) => s.connection.status === 'connected');
@@ -64,11 +67,11 @@ export function TravelSpeedControl() {
     {error ? <Text style={styles.error}>{error}</Text> : null}
   </View>;
 }
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   button: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: theme.colors.accentPrimary },
-  symbol: { fontSize: 26, color: '#071318' },
+  symbol: { fontSize: 26, color: theme.colors.onAccent },
   value: { color: theme.colors.textPrimary, fontSize: 16, minWidth: 70, textAlign: 'center' },
   disabled: { opacity: 0.35 },
   error: { color: '#ff7272', fontSize: 12, maxWidth: 220 },

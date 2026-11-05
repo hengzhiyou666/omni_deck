@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +38,7 @@ function SeriesRow({
   onUpdate: (s: SeriesConfig) => void;
   onRemove: () => void;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const [expanded, setExpanded] = useState(!series.topic);
 
   const summary = series.topic
@@ -107,6 +110,7 @@ function SeriesRow({
 }
 
 export function SeriesEditor({ value, onChange }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const addSeries = () => {
     const color = PALETTE[value.length % PALETTE.length];
     onChange([...value, { topic: '', messageType: '', field: '', label: '', color }]);
@@ -135,7 +139,7 @@ export function SeriesEditor({ value, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { gap: 8 },
   row: {
     borderWidth: 1,

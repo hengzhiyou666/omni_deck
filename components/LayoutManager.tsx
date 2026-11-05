@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 // components/LayoutManager.tsx
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet, TextInput } from 'react-native';
@@ -9,6 +11,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { theme } from '../constants/theme';
 
 export function LayoutManager() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const layouts = useLayoutStore((s) => s.layouts);
   const activeLayoutId = useLayoutStore((s) => s.activeLayoutId);
   const editMode = useLayoutStore((s) => s.editMode);
@@ -350,7 +353,7 @@ export function LayoutManager() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: 'row',

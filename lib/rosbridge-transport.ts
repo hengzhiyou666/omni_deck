@@ -1,3 +1,5 @@
+import { mediaSubscription } from './media-subscription';
+import { meterSocket } from './network-traffic';
 // lib/rosbridge-transport.ts
 import type { Transport, Subscription, TopicInfo, TransportStatus } from './transport';
 import { DEFAULTS } from '../constants/defaults';
@@ -42,6 +44,7 @@ export class RosbridgeTransport implements Transport {
 
     return new Promise((resolve, reject) => {
       this.ros = new roslib.Ros({ url: canonicalUrl });
+      if (this.ros.socket) meterSocket(this.ros.socket);
 
       const timeout = setTimeout(() => {
         this.ros?.close();
@@ -76,6 +79,9 @@ export class RosbridgeTransport implements Transport {
   }
 
   subscribe(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
+    return mediaSubscription(messageType, () => this.subscribeActual(topic, messageType, callback, throttleRate));
+  }
+  private subscribeActual(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
     if (!this.ros || !ROSLIB) {
       return { unsubscribe: () => {} };
     }

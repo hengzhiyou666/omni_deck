@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import {
   AlphaType,
   Canvas,
@@ -129,6 +131,7 @@ function lookupTransform(
 
 
 export function MapWidget(props: MapWidgetRuntimeProps) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const transport = useRosStore((s) => s.transport);
   const status = useRosStore((s) => s.connection.status);
   const topic = props?.config?.topic || "/map";
@@ -1136,6 +1139,7 @@ function MapControls({
   onReset: () => void;
   onFollow: () => void;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   return (
     <View style={styles.zoomControls}>
       <TouchableOpacity style={styles.zoomButton} onPress={onZoomIn}>
@@ -1164,7 +1168,7 @@ function MapControls({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { backgroundColor: "#000", overflow: "hidden" },
   placeholder: { flex: 1, justifyContent: "center", alignItems: "center" },
   placeholderText: {

@@ -11,6 +11,7 @@
 // re-dispatching.
 
 import type { Transport } from '../transport';
+import { useCmdVelStore } from '../../stores/useCmdVelStore';
 import {
   AUTONOMY_REQUEST_SOURCE,
   resolveMissionCommandSequence,
@@ -194,6 +195,9 @@ export async function controlMission(
   command: MissionControlCmd,
   missionId?: string,
 ): Promise<ControlResponse> {
+  if (command === MISSION_CONTROL_CMD.RESUME && useCmdVelStore.getState().postureInhibited) {
+    throw new Error('请先等待站立动作完成，再继续巡检 / Stand up before resuming');
+  }
   const raw = await transport.callService(
     MISSION_CONTROL_SERVICE,
     MISSION_CONTROL_SERVICE_TYPE,

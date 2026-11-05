@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 // components/TopicPicker.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
@@ -14,6 +16,7 @@ interface Props {
 }
 
 export function TopicPicker({ value, filterMessageTypes, onSelect, language = 'en' }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const [topics, setTopics] = useState<TopicInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -122,7 +125,7 @@ export function TopicPicker({ value, filterMessageTypes, onSelect, language = 'e
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   collapsed: {
     flexDirection: 'row',
     justifyContent: 'space-between',

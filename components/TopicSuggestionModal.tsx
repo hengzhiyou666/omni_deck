@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
 import { theme } from '../constants/theme';
@@ -19,6 +21,7 @@ function shortType(fullType: string): string {
 }
 
 export function TopicSuggestionModal({ visible, suggestion, onAccept, onDismiss }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const language = useSettingsStore((s) => s.language);
   if (!suggestion) return null;
 
@@ -58,7 +61,7 @@ export function TopicSuggestionModal({ visible, suggestion, onAccept, onDismiss 
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: '#000000CC',

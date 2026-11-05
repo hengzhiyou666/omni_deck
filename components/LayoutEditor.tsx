@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useState } from 'react';
 import { View, TouchableOpacity, Text, Modal, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -28,6 +30,7 @@ export function LayoutEditor({
   nodeId, widgetType, config, onConfigChange,
   parentSplitId, parentDirection, paneWidth, paneHeight,
 }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const [menuVisible, setMenuVisible] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -178,7 +181,7 @@ export function LayoutEditor({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#0D0D0DBB',

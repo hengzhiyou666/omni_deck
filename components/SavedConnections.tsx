@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export function SavedConnections({ onSelect }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const { t } = useTranslation();
   const savedConnections = useRosStore((s) => s.savedConnections);
   const removeSavedConnection = useRosStore((s) => s.removeSavedConnection);
@@ -39,7 +42,7 @@ export function SavedConnections({ onSelect }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { paddingTop: 20 },
   title: {
     ...theme.typography.headingSm,

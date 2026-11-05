@@ -350,3 +350,13 @@ describe('generateMappingMapId', () => {
     expect(isValidMapId(`m${'a'.repeat(64)}`)).toBe(false);
   });
 });
+
+
+it('starts an unbound mapping route with a session token instead of a fake map identity', async () => {
+  const { transport } = makeTransport({ accepted: true, operation_id: 'record-1', runtime_generation: 3 });
+  await setAutonomyMode(transport, { desiredMode: AUTONOMY_MODE.ROUTE_RECORDING,
+    routeId: 'during-mapping', mappingSessionId: 'epoch:3' });
+  expect(transport.callService).toHaveBeenCalledWith(expect.any(String), expect.any(String),
+    expect.objectContaining({ mapping_session_id: 'epoch:3', map_id: '', map_version: 0,
+      map_checksum: '', route_id: 'during-mapping' }));
+});

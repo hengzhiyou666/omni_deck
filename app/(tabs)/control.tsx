@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../../hooks/useAppTheme';
+import type { AppTheme } from '../../constants/theme';
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
@@ -45,6 +47,7 @@ import { useTranslation } from "../../lib/i18n";
 import { ControlCockpit } from "../../components/ControlCockpit";
 
 function ConnectionDot() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const status = useRosStore((s) => s.connection.status);
   const error = useRosStore((s) => s.connection.error);
   const url = useRosStore((s) => s.connection.url);
@@ -145,6 +148,7 @@ function ConnectionDot() {
 }
 
 export default function ControlScreen() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const status = useRosStore((s) => s.connection.status);
   const authorityStatus = useControlAuthorityStore((s) => s.status);
   const url = useRosStore((s) => s.connection.url);
@@ -408,7 +412,7 @@ export default function ControlScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.bgBase,

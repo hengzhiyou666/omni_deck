@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, TextInput, Switch, TouchableOpacity, Modal, ScrollView, StyleSheet, Keyboard, TouchableWithoutFeedback, type LayoutChangeEvent, type GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +23,7 @@ interface Props {
 }
 
 function NumberField({ field, value, onChange }: { field: WidgetConfigField; value: any; onChange: (v: any) => void }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const [text, setText] = React.useState(String(value ?? ''));
 
   // Sync external value changes (e.g., from reset)
@@ -64,6 +67,7 @@ function NumberField({ field, value, onChange }: { field: WidgetConfigField; val
 // ─── Slider Field ────────────────────────────────────────────────────────────
 
 function SliderField({ field, value, onChange }: { field: WidgetConfigField; value: number; onChange: (v: number) => void }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const min = field.min ?? 0;
   const max = field.max ?? 100;
   const step = field.step ?? 1;
@@ -147,6 +151,7 @@ function ScaleInputPair({ leftValue, rightValue, onLeftChange, onRightChange }: 
   onLeftChange: (v: number) => void;
   onRightChange: (v: number) => void;
 }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const fmt = (n: number) => n.toFixed(2);
   const [leftText, setLeftText] = React.useState(fmt(leftValue));
   const [rightText, setRightText] = React.useState(fmt(rightValue));
@@ -263,6 +268,7 @@ export function WidgetSettings({
   recommendedConfig,
   recommendedDescription,
 }: Props) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const { isLandscape } = useOrientation();
   const [draft, setDraft] = useState(config);
   const zh = language === 'zh';
@@ -442,7 +448,7 @@ export function WidgetSettings({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: '#00000088',

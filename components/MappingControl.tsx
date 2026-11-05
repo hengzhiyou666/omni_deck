@@ -1,3 +1,5 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useState } from 'react';
 import {
@@ -36,7 +38,8 @@ function phaseIsTransitioning(phase: number): boolean {
     phase === AUTONOMY_PHASE.STOPPING;
 }
 
-export function MappingControl({ compact = false }: { compact?: boolean }) {
+export function MappingControl({ compact = false, cockpit = false }: { compact?: boolean; cockpit?: boolean }) {
+  const { theme, styles } = useThemeStyles(createStyles);
   const connectionStatus = useRosStore((state) => state.connection.status);
   const transport = useRosStore((state) => state.transport);
   const url = useRosStore((state) => state.connection.url);
@@ -159,7 +162,7 @@ export function MappingControl({ compact = false }: { compact?: boolean }) {
   const activeStyle = mappingFinishable || mappingStarting || mappingStopping;
   return (
     <>
-      <View style={[styles.controlBlock, compact && styles.compactControlBlock]}>
+      <View style={[styles.controlBlock, compact && styles.compactControlBlock, cockpit && { minWidth: 0 }]}>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel={t(labelKey)}
@@ -167,6 +170,7 @@ export function MappingControl({ compact = false }: { compact?: boolean }) {
             styles.button,
             mappingFinishable && styles.stopButton,
             compact && styles.compactButton,
+            cockpit && { paddingHorizontal: 8, minHeight: 40 },
             disabled && styles.disabled,
           ]}
           disabled={disabled}
@@ -187,12 +191,12 @@ export function MappingControl({ compact = false }: { compact?: boolean }) {
                 : theme.colors.accentPrimary}
           />
           {!compact && (
-            <Text style={[styles.text, mappingFinishable && styles.stopText]}>
+            <Text style={[styles.text, cockpit && { fontSize: 10 }, mappingFinishable && styles.stopText]}>
               {t(labelKey)}
             </Text>
           )}
         </TouchableOpacity>
-        {!compact && mappingTargetId ? (
+        {!compact && !cockpit && mappingTargetId ? (
           <Text style={styles.mapNameText} numberOfLines={1}>
             {t('mapping.activeMap', { map: mappingTargetId })}
           </Text>
@@ -280,7 +284,7 @@ export function MappingControl({ compact = false }: { compact?: boolean }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   controlBlock: { flex: 1, minWidth: 120, gap: 4 },
   compactControlBlock: { flex: 0, minWidth: 40 },
   button: {
@@ -402,5 +406,5 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: theme.colors.accentPrimary,
   },
-  primaryButtonText: { color: '#061014', fontWeight: '800' },
+  primaryButtonText: { color: theme.colors.onAccent, fontWeight: '800' },
 });

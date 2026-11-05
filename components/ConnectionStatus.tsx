@@ -1,9 +1,12 @@
+import { useThemeStyles } from '../hooks/useAppTheme';
+import type { AppTheme } from '../constants/theme';
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated as RNAnimated, Platform } from 'react-native';
 import { useRosStore } from '../stores/useRosStore';
 import { theme } from '../constants/theme';
 
 export function ConnectionStatus() {
+  const { theme, styles } = useThemeStyles(createStyles);
   const status = useRosStore((s) => s.connection.status);
   const error = useRosStore((s) => s.connection.error);
   const pulseAnim = useRef(new RNAnimated.Value(1)).current;
@@ -72,7 +75,7 @@ export function ConnectionStatus() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 },
   dot: {
     width: 10,

@@ -1,6 +1,9 @@
+import { mediaSubscription } from './media-subscription';
+import { countPayload, sendPayload } from './network-traffic';
 import type { Transport, ConnectOptions, Subscription, TopicInfo, TransportStatus } from './transport';
 import { MessageReader, MessageWriter } from '@foxglove/rosmsg2-serialization';
 import { parse as parseMessageDefinition } from '@foxglove/rosmsg';
+import { parseRos2idl } from '@foxglove/ros2idl-parser';
 import { DEFAULTS, FOXGLOVE_WEBSOCKET_PROTOCOLS } from '../constants/defaults';
 import { canonicalizeConnectionUrl } from './connection-url';
 import { getLocalServiceSchema } from './ros-service-schemas';
@@ -47,7 +50,7 @@ export class FoxgloveTransport implements Transport {
   private clientChannels: Map<string, { id: number; messageType: string }> = new Map();
   private nextClientChannelId = 1;
   private messageReaders: Map<string, MessageReader> = new Map();
-  private schemaDefinitions: Map<string, string> = new Map();
+  private schemaDefinitions: Map<string, { schema: string; encoding?: string }> = new Map();
   private pendingSubscriptions: Array<{ subId: number; topic: string }> = [];
   private cancelPendingConnect: (() => void) | null = null;
   // Multiplexing: one bridge-level sub per topic, fan-out to all internal callbacks.
@@ -142,7 +145,7 @@ export class FoxgloveTransport implements Transport {
           // "token"} as the very first data frame. Send it before reporting
           // the socket as connected so a failed send still rejects connect().
           try {
-            socket.send(JSON.stringify({
+            sendPayload(socket, JSON.stringify({
               op: 'login',
               user: options.login.user,
               token: options.login.token,
@@ -184,6 +187,7 @@ export class FoxgloveTransport implements Transport {
       };
 
       socket.onmessage = (event) => {
+        countPayload('rx', event.data);
         if (typeof event.data === 'string') {
           if (event.data.startsWith('{') || event.data.startsWith('[')) {
             try { this.handleMessage(JSON.parse(event.data)); } catch {}
@@ -239,10 +243,11 @@ export class FoxgloveTransport implements Transport {
             this.topicToChannelId.set(ch.topic, ch.id);
             if (ch.schema && ch.schemaName) {
               // 同名 schema 可能在 channel 重建后发生变化，旧 reader 不能跨代复用。
-              if (this.schemaDefinitions.get(ch.schemaName) !== ch.schema) {
+              const previous = this.schemaDefinitions.get(ch.schemaName);
+              if (previous?.schema !== ch.schema || previous?.encoding !== ch.schemaEncoding) {
                 this.messageReaders.delete(ch.schemaName);
               }
-              this.schemaDefinitions.set(ch.schemaName, ch.schema);
+              this.schemaDefinitions.set(ch.schemaName, { schema: ch.schema, encoding: ch.schemaEncoding });
             }
           }
           this.flushPendingSubscriptions();
@@ -398,20 +403,23 @@ export class FoxgloveTransport implements Transport {
 
   private getServiceSchema(service: AdvertisedService, direction: 'request' | 'response'): string | undefined {
     const modern = service[direction]?.schema;
-    // 空 request 是合法 schema，不能用 truthy 判断把它当成“未提供”。
-    if (modern !== undefined) return modern;
+    const local = getLocalServiceSchema(service.type, direction);
+    // Older bridges advertise empty strings when a service definition is unavailable.
+    // Use its known contract; an unknown empty string cannot establish an empty request.
+    if (modern !== undefined) return modern.trim() ? modern : local;
 
     const legacy = direction === 'request' ? service.requestSchema : service.responseSchema;
     if (legacy !== undefined) {
       // Be tolerant of bridges which put the complete .srv definition in both
       // legacy fields rather than advertising the two message definitions.
       const sections = legacy.split(/^---\s*$/m);
-      return direction === 'request' ? sections[0]?.trim() : (sections[1] ?? sections[0])?.trim();
+      const schema = direction === 'request' ? sections[0]?.trim() : (sections[1] ?? sections[0])?.trim();
+      return schema || local || (sections.length > 1 ? schema : undefined);
     }
 
     // Humble 的部分 foxglove_bridge 只通告服务 type。固定 IDL 兜底保证安全
     // Trigger 与 Mission 服务仍按真实 CDR 合同传输，未知类型继续 fail closed。
-    return getLocalServiceSchema(service.type, direction);
+    return local;
   }
 
   private getServiceRequestEncoding(service: AdvertisedService): string {
@@ -443,7 +451,9 @@ export class FoxgloveTransport implements Transport {
     if (!schema) return undefined;
 
     try {
-      const msgDefs = parseMessageDefinition(schema, { ros2: true });
+      const msgDefs = schema.encoding === 'ros2idl'
+        ? parseRos2idl(schema.schema)
+        : parseMessageDefinition(schema.schema, { ros2: true });
       reader = new MessageReader(msgDefs);
       this.messageReaders.set(schemaName, reader);
       return reader;
@@ -504,7 +514,7 @@ export class FoxgloveTransport implements Transport {
     for (const pending of this.pendingSubscriptions) {
       const channelId = this.topicToChannelId.get(pending.topic);
       if (channelId !== undefined && this.ws) {
-        this.ws.send(JSON.stringify({
+        sendPayload(this.ws, JSON.stringify({
           op: 'subscribe',
           subscriptions: [{ id: pending.subId, channelId }],
         }));
@@ -613,7 +623,7 @@ export class FoxgloveTransport implements Transport {
         responseSchema,
       });
       try {
-        socket.send(payload);
+        sendPayload(socket, payload);
       } catch (error: any) {
         clearTimeout(timeout);
         this.pendingServiceCalls.delete(callId);
@@ -623,6 +633,9 @@ export class FoxgloveTransport implements Transport {
   }
 
   subscribe(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
+    return mediaSubscription(messageType, () => this.subscribeActual(topic, messageType, callback, throttleRate));
+  }
+  private subscribeActual(topic: string, messageType: string, callback: (msg: any) => void, throttleRate?: number): Subscription {
     const subId = this.nextSubId++;
     const normalizedThrottleRate = typeof throttleRate === 'number'
       && Number.isFinite(throttleRate)
@@ -642,7 +655,7 @@ export class FoxgloveTransport implements Transport {
       this.bridgeSubToTopic.set(subId, topic);
       const channelId = this.topicToChannelId.get(topic);
       if (channelId !== undefined && this.ws) {
-        this.ws.send(JSON.stringify({
+        sendPayload(this.ws, JSON.stringify({
           op: 'subscribe',
           subscriptions: [{ id: subId, channelId }],
         }));
@@ -668,7 +681,7 @@ export class FoxgloveTransport implements Transport {
             this.bridgeSubToTopic.delete(bridgeSubId);
             const ch = this.topicToChannelId.get(topic);
             if (ch !== undefined && this.ws) {
-              this.ws.send(JSON.stringify({
+              sendPayload(this.ws, JSON.stringify({
                 op: 'unsubscribe',
                 subscriptionIds: [bridgeSubId],
               }));
@@ -687,7 +700,7 @@ export class FoxgloveTransport implements Transport {
     // Foxglove protocol binds a schema to each advertised channel, so the old
     // channel must be withdrawn before publishing the new message shape.
     if (existing && this.ws) {
-      this.ws.send(JSON.stringify({
+      sendPayload(this.ws, JSON.stringify({
         op: 'unadvertise',
         channelIds: [existing.id],
       }));
@@ -697,7 +710,7 @@ export class FoxgloveTransport implements Transport {
     this.clientChannels.set(topic, { id: channelId, messageType });
 
     if (this.ws) {
-      this.ws.send(JSON.stringify({
+      sendPayload(this.ws, JSON.stringify({
         op: 'advertise',
         channels: [{
           id: channelId,
@@ -722,7 +735,7 @@ export class FoxgloveTransport implements Transport {
     view.setUint32(1, channelId, true);
     new Uint8Array(buffer, 5).set(jsonBytes);
 
-    this.ws.send(buffer);
+    sendPayload(this.ws, buffer);
   }
 
   async getTopics(): Promise<TopicInfo[]> {

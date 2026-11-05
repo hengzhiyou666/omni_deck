@@ -24,14 +24,14 @@ describe('RouteRecordingControl contract', () => {
     expect(source).toContain('runtime?.route_has_unsaved_data');
     expect(source).toContain('runtime.route_point_count');
     expect(source).toContain('runtime.route_distance_m');
-    expect(source).toContain('mapChecksum: selectedMap.mapChecksum');
+    expect(source).toContain('mapChecksum: mapping ? undefined : selectedMap!.mapChecksum');
     expect(source).toContain("t('routeRecording.activeRoute'");
     expect(source).toContain('phase === AUTONOMY_PHASE.ERROR');
   });
 
   it('offers finish as soon as Manager publishes the recording session identity', () => {
     expect(source).toContain('const recordingSessionActive = Boolean(recordingOperationId)');
-    expect(source).toContain('recording || recordingStarting');
+    expect(source).toContain('const mapping = runtime?.mode === AUTONOMY_MODE.MAPPING');
     expect(source).toContain('!recordingSessionActive');
     expect(source).toContain("t('routeRecording.recording'");
   });
@@ -41,7 +41,7 @@ describe('RouteRecordingControl contract', () => {
     expect(source).toContain('setMapPickerOpen(true)');
     expect(source).toContain('setSelectedMap(entry)');
     expect(source).toContain('每次新建录制会话都查询机器人目录');
-    expect(source).toContain('mapVersion: selectedMap.mapVersion');
+    expect(source).toContain('mapVersion: mapping ? undefined : selectedMap!.mapVersion');
     expect(source).not.toContain('/omni/slam/maps/list');
   });
 

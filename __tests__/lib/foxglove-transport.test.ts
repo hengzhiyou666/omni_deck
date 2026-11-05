@@ -2,6 +2,12 @@ import { FoxgloveTransport } from '../../lib/foxglove-transport';
 import { MessageReader, MessageWriter } from '@foxglove/rosmsg2-serialization';
 import { parse as parseMessageDefinition } from '@foxglove/rosmsg';
 
+const CAPTURED_BUSINESS_MESSAGES = require('../fixtures/dog4-business-ros2idl.json') as Array<{
+  channel: { id: number; topic: string; schemaName: string; schemaEncoding: string; schema: string };
+  cdrBase64: string;
+  expected: Record<string, unknown>;
+}>;
+
 const SET_RUN_MODE_REQUEST_SCHEMA = `uint8 target_state
 uint8 mode
 string req_id
@@ -43,7 +49,8 @@ describe('FoxgloveTransport connection', () => {
       await jest.advanceTimersByTimeAsync(500);
       socket.onmessage?.({ data: JSON.stringify({
         op: 'advertiseServices', services: [{
-          id: 8, name: '/test/renew', type: 'test/srv/Renew', requestSchema: '', responseSchema: '',
+          id: 8, name: '/test/renew', type: 'test/srv/Renew',
+          requestSchema: '# Empty request.', responseSchema: '# Empty response.',
         }],
       }) });
       await jest.advanceTimersByTimeAsync(1000);
@@ -232,6 +239,8 @@ describe('FoxgloveTransport connection', () => {
         id: 8,
         name: '/omni/safety/arm_supervisor',
         type: 'std_srvs/srv/Trigger',
+        requestSchema: '',
+        responseSchema: '',
       }],
     }) });
 
@@ -271,6 +280,77 @@ describe('FoxgloveTransport connection', () => {
       success: true,
       message: 'supervisor_armed',
     });
+  });
+
+  it('uses the known ControlAuthority contract when the bridge advertises empty schemas', async () => {
+    const transport = new FoxgloveTransport();
+    const requestSchema = (transport as any).getServiceSchema({
+      type: 'omni_robot_interfaces/srv/ControlAuthority', requestSchema: '', responseSchema: '',
+    }, 'request');
+    const request = {
+      op: 0, owner_type: 1, client_id: 'offline-test-not-sent', lease_sec: 3,
+      reason: 'offline schema check',
+    };
+    const body = new MessageWriter(parseMessageDefinition(requestSchema, { ros2: true })).writeMessage(request);
+    expect(body.byteLength).toBe(65);
+    expect(new MessageReader(parseMessageDefinition(requestSchema, { ros2: true })).readMessage(body)).toEqual(request);
+    expect((transport as any).getServiceSchema({
+      type: 'omni_robot_interfaces/srv/ControlAuthority', requestSchema: '', responseSchema: '',
+    }, 'response')).toContain('bool accepted');
+    expect(socket.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown service with unavailable schemas instead of sending an empty request', async () => {
+    const transport = new FoxgloveTransport();
+    const connecting = transport.connect('ws://192.168.1.50:8765');
+    socket.onopen?.({});
+    await connecting;
+    socket.onmessage?.({ data: JSON.stringify({
+      op: 'advertiseServices', services: [{
+        id: 8, name: '/test/unknown', type: 'test/srv/Unknown', requestSchema: '', responseSchema: '',
+      }],
+    }) });
+    await expect(transport.callService('/test/unknown', 'test/srv/Unknown', { value: 1 }))
+      .rejects.toThrow('Missing CDR request schema');
+    expect(socket.send).not.toHaveBeenCalled();
+  });
+
+  it('encodes selected recording topics and decodes the response without advertised schemas', async () => {
+    const transport = new FoxgloveTransport();
+    const connecting = transport.connect('ws://192.168.1.50:8765');
+    socket.onopen?.({});
+    await connecting;
+    socket.onmessage?.({ data: JSON.stringify({
+      op: 'advertiseServices',
+      services: [{ id: 11, name: '/omni/recording/start_selected', type: 'omni_robot_interfaces/srv/StartBagRecording' }],
+    }) });
+    const topics = ['/omni/sensors/lidar/points', '/omni/sensors/imu/data', '/image_left_raw/h265_undistort'];
+    const pending = transport.callService('/omni/recording/start_selected',
+      'omni_robot_interfaces/srv/StartBagRecording', { topics });
+    const request = socket.send.mock.calls.at(-1)?.[0] as Uint8Array;
+    const view = new DataView(request.buffer, request.byteOffset, request.byteLength);
+    expect(view.getUint8(0)).toBe(2);
+    expect(view.getUint32(1, true)).toBe(11);
+    const callId = view.getUint32(5, true);
+    const encodingLength = view.getUint32(9, true);
+    expect(new TextDecoder().decode(request.subarray(13, 13 + encodingLength))).toBe('cdr');
+    expect(new MessageReader(parseMessageDefinition('string[] topics', { ros2: true }))
+      .readMessage(request.subarray(13 + encodingLength))).toEqual({ topics });
+
+    const encoding = new TextEncoder().encode('cdr');
+    const result = { success: true, message: '/userdata/1_heng/data/bags/test' };
+    const body = new MessageWriter(parseMessageDefinition('bool success\nstring message', { ros2: true }))
+      .writeMessage(result);
+    const response = new Uint8Array(13 + encoding.length + body.length);
+    const responseView = new DataView(response.buffer);
+    responseView.setUint8(0, 3);
+    responseView.setUint32(1, 11, true);
+    responseView.setUint32(5, callId, true);
+    responseView.setUint32(9, encoding.length, true);
+    response.set(encoding, 13);
+    response.set(body, 13 + encoding.length);
+    socket.onmessage?.({ data: response.buffer });
+    await expect(pending).resolves.toEqual(result);
   });
 
   it('decodes ListRoutes through the local Omni service schema fallback', async () => {
@@ -396,6 +476,31 @@ describe('FoxgloveTransport topic subscriptions', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it.each(CAPTURED_BUSINESS_MESSAGES)('decodes captured dog4 ros2idl CDR for $channel.topic', async ({ channel, cdrBase64, expected }) => {
+    const transport = new FoxgloveTransport();
+    const connecting = transport.connect('ws://192.168.1.50:8765');
+    socket.onopen?.({});
+    await connecting;
+    const advertise = (schemaEncoding: string) => socket.onmessage?.({ data: JSON.stringify({
+      op: 'advertise', channels: [{ ...channel, encoding: 'cdr', schemaEncoding }],
+    }) });
+    advertise('ros2idl');
+    const callback = jest.fn();
+    transport.subscribe(channel.topic, channel.schemaName, callback);
+    const bridgeSubId = subscribeFrames()[0].subscriptions[0].id;
+    const frame = makeServerMessage(bridgeSubId, new Uint8Array(Buffer.from(cdrBase64, 'base64')));
+    socket.onmessage?.({ data: frame });
+    expect(callback).toHaveBeenLastCalledWith(expect.objectContaining(expected));
+
+    // Identical text with a different encoding must not reuse the cached IDL reader.
+    advertise('ros2msg');
+    socket.onmessage?.({ data: frame });
+    expect(callback).toHaveBeenCalledTimes(1);
+    advertise('ros2idl');
+    socket.onmessage?.({ data: frame });
+    expect(callback).toHaveBeenCalledTimes(2);
   });
 
   it('re-subscribes to a replacement channel and rebuilds a changed same-name schema reader', async () => {
